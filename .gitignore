@@ -1,0 +1,9 @@
+node_modules
+.env
+swagger-v1 (1).json
+
+# Bỏ qua node_modules của tất cả các thư mục con
+**/node_modules/
+**/dist/
+**/build/
+.env
