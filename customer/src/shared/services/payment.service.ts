@@ -9,7 +9,7 @@ export interface PaymentInitiateRequest {
   orderId: string;
   userId: string;
   amount: number;
-  method: number;
+  method: "COD" | "OnlineBanking";
   items?: PaymentOrderItemRequest[];
 }
 

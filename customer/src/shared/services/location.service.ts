@@ -1,3 +1,7 @@
+import provincesJson from "../../../../public/locations/provinces.json";
+import districtsJson from "../../../../public/locations/districts.json";
+import wardsJson from "../../../../public/locations/wards.json";
+
 export interface Province {
   id: number;
   name: string;
@@ -23,6 +27,12 @@ export interface LocationData {
 }
 
 const STORAGE_KEY = "everland_locations_v1";
+
+const bundledLocations: LocationData = {
+  provinces: provincesJson as Province[],
+  districts: districtsJson as District[],
+  wards: wardsJson as Ward[],
+};
 
 const isBrowser = () => typeof window !== "undefined";
 
@@ -86,21 +96,7 @@ let inMemoryCache: LocationData | null = null;
 let loadingPromise: Promise<LocationData> | null = null;
 
 const fetchLocations = async (): Promise<LocationData> => {
-  const [provinces, districts, wards] = await Promise.all([
-    fetch("/locations/provinces.json").then(
-      (res) => res.json() as Promise<Province[]>,
-    ),
-    fetch("/locations/districts.json").then(
-      (res) => res.json() as Promise<District[]>,
-    ),
-    fetch("/locations/wards.json").then((res) => res.json() as Promise<Ward[]>),
-  ]);
-
-  return {
-    provinces,
-    districts,
-    wards,
-  };
+  return bundledLocations;
 };
 
 export const locationService = {

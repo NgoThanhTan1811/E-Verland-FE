@@ -28,6 +28,8 @@ export interface ProductResponse {
   reviewCount?: number;
   soldCount?: number;
   stock?: number;
+  imageUrl?: string;
+  imageUrls?: string[];
   images: string[];
   skus?: SkuResponse[];
   status?: number;
@@ -36,6 +38,7 @@ export interface ProductResponse {
 export interface SkuResponse {
   id: string;
   productId: string;
+  skuCode?: string;
   skuValue: string;
   price: number;
   stock: number;

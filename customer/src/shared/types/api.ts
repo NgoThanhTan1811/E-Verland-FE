@@ -313,7 +313,7 @@ export interface PaymentInitiateRequestDto {
   orderId: string;
   userId: string;
   amount: number;
-  method: number;
+  method: "COD" | "OnlineBanking";
   items?: PaymentOrderItemRequestDto[];
 }
 

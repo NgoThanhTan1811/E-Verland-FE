@@ -5,13 +5,18 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Checkbox } from "../../components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
 import { useAuth } from "../../../shared/contexts/auth-context";
 import { accountService } from "../../../shared/services/account.service";
 import { profileService } from "../../../shared/services/profile.service";
 import { locationService } from "../../../shared/services/location.service";
 import { toast } from "sonner";
-
-const MAX_LOCATION_SUGGESTIONS = 20;
 
 export function AddressFormPage() {
   const { addressId } = useParams();
@@ -32,9 +37,6 @@ export function AddressFormPage() {
     isDefault: false,
   });
 
-  const [provinceQuery, setProvinceQuery] = useState("");
-  const [districtQuery, setDistrictQuery] = useState("");
-  const [wardQuery, setWardQuery] = useState("");
   const [locationData, setLocationData] = useState<{
     provinces: Array<{ id: number; name: string }>;
     districts: Array<{ id: number; name: string; provinceId: number }>;
@@ -67,6 +69,16 @@ export function AddressFormPage() {
 
         const nextProfileId = me.profile?.id || user.profile?.id || "";
         setProfileId(nextProfileId);
+
+        // If creating a new address, require basic profile info (first & last name)
+        if (!isEditMode) {
+          const profile = me.profile || user.profile;
+          if (!profile || !profile.firstName || !profile.lastName) {
+            toast.info("Vui lòng cập nhật hồ sơ trước khi thêm địa chỉ");
+            navigate("/profile/edit");
+            return;
+          }
+        }
       } catch {
         if (isMounted) {
           setProfileId(user.profile?.id || "");
@@ -129,10 +141,6 @@ export function AddressFormPage() {
           detail: data.detail || "",
           isDefault: !!data.isDefault,
         });
-
-        setProvinceQuery(data.province || data.city || "");
-        setDistrictQuery(data.district || "");
-        setWardQuery(data.ward || "");
       } catch (error: unknown) {
         if (isMounted) {
           toast.error(
@@ -152,68 +160,36 @@ export function AddressFormPage() {
   }, [addressId, isEditMode, profileId]);
 
   useEffect(() => {
-    if (!formData.provinceId) return;
-    const selected = locationData.provinces.find(
-      (item) => item.id === Number(formData.provinceId),
-    );
-    if (selected) {
-      setProvinceQuery(selected.name);
-    }
-  }, [formData.provinceId, locationData.provinces]);
-
-  useEffect(() => {
-    if (!formData.districtId) return;
-    const selected = locationData.districts.find(
-      (item) => item.id === Number(formData.districtId),
-    );
-    if (selected) {
-      setDistrictQuery(selected.name);
-    }
-  }, [formData.districtId, locationData.districts]);
-
-  useEffect(() => {
-    if (!formData.wardId) return;
-    const selected = locationData.wards.find(
-      (item) => item.id === Number(formData.wardId),
-    );
-    if (selected) {
-      setWardQuery(selected.name);
-    }
-  }, [formData.wardId, locationData.wards]);
+    if (!formData.provinceId || !formData.districtId || !formData.wardId)
+      return;
+  }, [formData.provinceId, formData.districtId, formData.wardId]);
 
   const selectedProvinceId = Number(formData.provinceId || 0);
   const selectedDistrictId = Number(formData.districtId || 0);
 
-  const provinceSuggestions = useMemo(
+  const provinceOptions = useMemo(
     () =>
-      locationService.searchProvinces(
-        locationData,
-        provinceQuery,
-        MAX_LOCATION_SUGGESTIONS,
-      ),
-    [locationData, provinceQuery],
+      [...locationData.provinces].sort((a, b) => a.name.localeCompare(b.name)),
+    [locationData.provinces],
   );
 
-  const districtSuggestions = useMemo(() => {
+  const districtOptions = useMemo(() => {
     if (!selectedProvinceId) return [];
-    return locationService.searchDistricts(
-      locationData,
-      selectedProvinceId,
-      districtQuery,
-      MAX_LOCATION_SUGGESTIONS,
-    );
-  }, [locationData, selectedProvinceId, districtQuery]);
+    return locationData.districts
+      .filter((district) => district.provinceId === selectedProvinceId)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [locationData.districts, selectedProvinceId]);
 
-  const wardSuggestions = useMemo(() => {
+  const wardOptions = useMemo(() => {
     if (!selectedProvinceId || !selectedDistrictId) return [];
-    return locationService.searchWards(
-      locationData,
-      selectedProvinceId,
-      selectedDistrictId,
-      wardQuery,
-      MAX_LOCATION_SUGGESTIONS,
-    );
-  }, [locationData, selectedProvinceId, selectedDistrictId, wardQuery]);
+    return locationData.wards
+      .filter(
+        (ward) =>
+          ward.provinceId === selectedProvinceId &&
+          ward.districtId === selectedDistrictId,
+      )
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [locationData.wards, selectedProvinceId, selectedDistrictId]);
 
   const handleChange = (field: string, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -318,68 +294,35 @@ export function AddressFormPage() {
 
           {/* Province */}
           <div className="space-y-2">
-            <Label htmlFor="provinceInput">
+            <Label htmlFor="provinceSelect">
               Tỉnh/Thành phố <span className="text-red-500">*</span>
             </Label>
-            <Input
-              id="provinceInput"
-              list="province-suggestions"
-              value={provinceQuery}
-              onChange={(e) => {
-                setProvinceQuery(e.target.value);
-                setDistrictQuery("");
-                setWardQuery("");
+            <Select
+              value={formData.provinceId}
+              onValueChange={(value) => {
                 setFormData((prev) => ({
                   ...prev,
-                  provinceId: "",
+                  provinceId: value,
                   districtId: "",
                   wardId: "",
                 }));
               }}
-              placeholder="Nhập để tìm tỉnh/thành"
-              className={errors.provinceId ? "border-red-500" : ""}
               disabled={isLoadingLocations}
-            />
-            <datalist id="province-suggestions">
-              {provinceSuggestions.map((province) => (
-                <option key={province.id} value={province.name} />
-              ))}
-            </datalist>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const selected = provinceSuggestions.find(
-                    (item) =>
-                      item.name.toLowerCase() === provinceQuery.toLowerCase(),
-                  );
-                  if (!selected) {
-                    toast.error("Vui lòng chọn tỉnh/thành từ danh sách gợi ý");
-                    return;
-                  }
-
-                  setFormData((prev) => ({
-                    ...prev,
-                    provinceId: String(selected.id),
-                    districtId: "",
-                    wardId: "",
-                  }));
-                  setProvinceQuery(selected.name);
-                  setDistrictQuery("");
-                  setWardQuery("");
-                }}
-                disabled={isLoadingLocations}
+            >
+              <SelectTrigger
+                id="provinceSelect"
+                className={errors.provinceId ? "border-red-500" : ""}
               >
-                Xác nhận tỉnh/thành
-              </Button>
-              {formData.provinceId && (
-                <p className="text-sm text-neutral-600 self-center">
-                  ID: {formData.provinceId}
-                </p>
-              )}
-            </div>
+                <SelectValue placeholder="Chọn tỉnh/thành phố" />
+              </SelectTrigger>
+              <SelectContent>
+                {provinceOptions.map((province) => (
+                  <SelectItem key={province.id} value={String(province.id)}>
+                    {province.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {errors.provinceId && (
               <p className="text-sm text-red-500">{errors.provinceId}</p>
             )}
@@ -387,64 +330,34 @@ export function AddressFormPage() {
 
           {/* District */}
           <div className="space-y-2">
-            <Label htmlFor="districtInput">
+            <Label htmlFor="districtSelect">
               Quận/Huyện <span className="text-red-500">*</span>
             </Label>
-            <Input
-              id="districtInput"
-              list="district-suggestions"
-              value={districtQuery}
-              onChange={(e) => {
-                setDistrictQuery(e.target.value);
-                setWardQuery("");
+            <Select
+              value={formData.districtId}
+              onValueChange={(value) => {
                 setFormData((prev) => ({
                   ...prev,
-                  districtId: "",
+                  districtId: value,
                   wardId: "",
                 }));
               }}
-              placeholder="Nhập để tìm quận/huyện"
-              className={errors.district ? "border-red-500" : ""}
               disabled={!formData.provinceId || isLoadingLocations}
-            />
-            <datalist id="district-suggestions">
-              {districtSuggestions.map((district) => (
-                <option key={district.id} value={district.name} />
-              ))}
-            </datalist>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const selected = districtSuggestions.find(
-                    (item) =>
-                      item.name.toLowerCase() === districtQuery.toLowerCase(),
-                  );
-                  if (!selected) {
-                    toast.error("Vui lòng chọn quận/huyện từ danh sách gợi ý");
-                    return;
-                  }
-
-                  setFormData((prev) => ({
-                    ...prev,
-                    districtId: String(selected.id),
-                    wardId: "",
-                  }));
-                  setDistrictQuery(selected.name);
-                  setWardQuery("");
-                }}
-                disabled={!formData.provinceId || isLoadingLocations}
+            >
+              <SelectTrigger
+                id="districtSelect"
+                className={errors.district ? "border-red-500" : ""}
               >
-                Xác nhận quận/huyện
-              </Button>
-              {formData.districtId && (
-                <p className="text-sm text-neutral-600 self-center">
-                  ID: {formData.districtId}
-                </p>
-              )}
-            </div>
+                <SelectValue placeholder="Chọn quận/huyện" />
+              </SelectTrigger>
+              <SelectContent>
+                {districtOptions.map((district) => (
+                  <SelectItem key={district.id} value={String(district.id)}>
+                    {district.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {errors.district && (
               <p className="text-sm text-red-500">{errors.district}</p>
             )}
@@ -452,60 +365,33 @@ export function AddressFormPage() {
 
           {/* Ward */}
           <div className="space-y-2">
-            <Label htmlFor="wardInput">
+            <Label htmlFor="wardSelect">
               Phường/Xã <span className="text-red-500">*</span>
             </Label>
-            <Input
-              id="wardInput"
-              list="ward-suggestions"
-              value={wardQuery}
-              onChange={(e) => {
-                setWardQuery(e.target.value);
+            <Select
+              value={formData.wardId}
+              onValueChange={(value) => {
                 setFormData((prev) => ({
                   ...prev,
-                  wardId: "",
+                  wardId: value,
                 }));
               }}
-              placeholder="Nhập để tìm phường/xã"
-              className={errors.ward ? "border-red-500" : ""}
               disabled={!formData.districtId || isLoadingLocations}
-            />
-            <datalist id="ward-suggestions">
-              {wardSuggestions.map((ward) => (
-                <option key={ward.id} value={ward.name} />
-              ))}
-            </datalist>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const selected = wardSuggestions.find(
-                    (item) =>
-                      item.name.toLowerCase() === wardQuery.toLowerCase(),
-                  );
-                  if (!selected) {
-                    toast.error("Vui lòng chọn phường/xã từ danh sách gợi ý");
-                    return;
-                  }
-
-                  setFormData((prev) => ({
-                    ...prev,
-                    wardId: String(selected.id),
-                  }));
-                  setWardQuery(selected.name);
-                }}
-                disabled={!formData.districtId || isLoadingLocations}
+            >
+              <SelectTrigger
+                id="wardSelect"
+                className={errors.ward ? "border-red-500" : ""}
               >
-                Xác nhận phường/xã
-              </Button>
-              {formData.wardId && (
-                <p className="text-sm text-neutral-600 self-center">
-                  ID: {formData.wardId}
-                </p>
-              )}
-            </div>
+                <SelectValue placeholder="Chọn phường/xã" />
+              </SelectTrigger>
+              <SelectContent>
+                {wardOptions.map((ward) => (
+                  <SelectItem key={ward.id} value={String(ward.id)}>
+                    {ward.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {errors.ward && (
               <p className="text-sm text-red-500">{errors.ward}</p>
             )}
@@ -516,24 +402,6 @@ export function AddressFormPage() {
               Đang tải danh sách tỉnh/thành, quận/huyện, phường/xã...
             </p>
           )}
-
-          {/* City & Province */}
-          <div className="grid md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="provinceId">Mã tỉnh</Label>
-              <Input id="provinceId" value={formData.provinceId} readOnly />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="districtId">Mã quận/huyện</Label>
-              <Input id="districtId" value={formData.districtId} readOnly />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="wardId">Mã phường/xã</Label>
-            <Input id="wardId" value={formData.wardId} readOnly />
-          </div>
 
           {/* Street */}
           <div className="space-y-2">

@@ -110,6 +110,9 @@ export function OrderDetailPage() {
     });
 
   const orderItems = order?.items || [];
+  const totalPrice = Number(order?.totalPrice) || 0;
+  const discount = Number(order?.discount) || 0;
+  const grandTotal = Number(order?.grandTotal) || 0;
 
   const handleCancel = async () => {
     if (!order || !user) return;
@@ -206,7 +209,7 @@ export function OrderDetailPage() {
                           Số lượng: {item.quantity}
                         </span>
                         <span className="font-semibold text-primary">
-                          {item.price.toLocaleString("vi-VN")}₫
+                          {(Number(item.price) || 0).toLocaleString("vi-VN")}₫
                         </span>
                       </div>
                     </div>
@@ -282,7 +285,8 @@ export function OrderDetailPage() {
                   <div className="flex justify-between">
                     <span className="text-neutral-600">Phí vận chuyển</span>
                     <span className="font-medium">
-                      {shipping.totalFee.toLocaleString("vi-VN")}₫
+                      {(Number(shipping.totalFee) || 0).toLocaleString("vi-VN")}
+                      ₫
                     </span>
                   </div>
                 </div>
@@ -336,19 +340,19 @@ export function OrderDetailPage() {
                 <div className="flex justify-between">
                   <span className="text-neutral-600">Tạm tính</span>
                   <span className="font-medium">
-                    {order.totalPrice.toLocaleString("vi-VN")}₫
+                    {totalPrice.toLocaleString("vi-VN")}₫
                   </span>
                 </div>
-                {order.discount > 0 && (
+                {discount > 0 && (
                   <div className="flex justify-between text-success">
                     <span>Giảm giá</span>
-                    <span>-{order.discount.toLocaleString("vi-VN")}₫</span>
+                    <span>-{discount.toLocaleString("vi-VN")}₫</span>
                   </div>
                 )}
                 <div className="border-t border-border pt-3 flex justify-between items-center">
                   <span className="font-semibold">Tổng cộng</span>
                   <span className="text-xl font-bold text-primary">
-                    {order.grandTotal.toLocaleString("vi-VN")}₫
+                    {grandTotal.toLocaleString("vi-VN")}₫
                   </span>
                 </div>
               </div>

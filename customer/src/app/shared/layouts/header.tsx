@@ -12,7 +12,13 @@ import {
 import { useEffect, useState } from "react";
 import { useAuth } from "../../../shared/contexts/auth-context";
 import { DEFAULT_AVATAR_URL } from "../constants";
+import { cartService } from "../../../shared/services/cart.service";
+import { notificationService } from "../../../shared/services/notification.service";
 import { mediaService } from "../../../shared/services/media.service";
+import {
+  productService,
+  CategoryResponse,
+} from "../../../shared/services/product.service";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,10 +42,40 @@ export function Header() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showLogoutDialog, setShowLogoutDialog] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState(DEFAULT_AVATAR_URL);
+  const [cartCount, setCartCount] = useState(0);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [categories, setCategories] = useState<CategoryResponse[]>([]);
   const { isAuthenticated, user, logout } = useAuth();
 
   useEffect(() => {
     let isMounted = true;
+
+    const loadCounts = async () => {
+      if (!isAuthenticated || !user?.id) {
+        if (isMounted) {
+          setCartCount(0);
+          setUnreadCount(0);
+        }
+        return;
+      }
+
+      try {
+        const [cartRes, unreadRes] = await Promise.all([
+          cartService.getCart(user.id).catch(() => null),
+          notificationService.getUnreadCount(user.id).catch(() => null),
+        ]);
+
+        if (!isMounted) return;
+
+        setCartCount(cartRes?.items?.length || 0);
+        setUnreadCount(unreadRes?.count || 0);
+      } catch {
+        if (isMounted) {
+          setCartCount(0);
+          setUnreadCount(0);
+        }
+      }
+    };
 
     const resolveAvatar = async () => {
       const source = user?.profile?.avatarUrl || "";
@@ -54,15 +90,32 @@ export function Header() {
       }
     };
 
+    const loadCategories = async () => {
+      try {
+        const res = await productService.getCategories();
+        if (isMounted) {
+          setCategories(res || []);
+        }
+      } catch {
+        if (isMounted) {
+          setCategories([]);
+        }
+      }
+    };
+
     resolveAvatar();
+    loadCounts();
+    loadCategories();
 
     return () => {
       isMounted = false;
     };
-  }, [user?.profile?.avatarUrl]);
+  }, [isAuthenticated, user?.id, user?.profile?.avatarUrl]);
 
-  const handleLogout = () => {
-    logout();
+  const visibleCategories = categories.slice(0, 6);
+
+  const handleLogout = async () => {
+    await logout();
     setShowLogoutDialog(false);
     window.location.href = "/";
   };
@@ -130,9 +183,11 @@ export function Header() {
               className="relative p-2 hover:bg-neutral-100 rounded-lg transition-colors"
             >
               <ShoppingCart className="h-6 w-6" />
-              <span className="absolute -top-1 -right-1 bg-error text-error-foreground text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                3
-              </span>
+              {cartCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-error text-error-foreground text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                  {cartCount > 99 ? "99+" : cartCount}
+                </span>
+              )}
             </Link>
 
             <Link
@@ -140,9 +195,11 @@ export function Header() {
               className="relative p-2 hover:bg-neutral-100 rounded-lg transition-colors hidden md:block"
             >
               <Bell className="h-6 w-6" />
-              <span className="absolute -top-1 -right-1 bg-error text-error-foreground text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                5
-              </span>
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 bg-error text-error-foreground text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
             </Link>
 
             {/* User Menu - Guest vs Logged In */}
@@ -224,42 +281,15 @@ export function Header() {
 
         {/* Categories navigation */}
         <nav className="mt-4 hidden md:flex items-center gap-6 text-sm">
-          <Link
-            to="/products?category=dien-thoai"
-            className="hover:text-primary transition-colors"
-          >
-            Điện thoại
-          </Link>
-          <Link
-            to="/products?category=laptop"
-            className="hover:text-primary transition-colors"
-          >
-            Laptop
-          </Link>
-          <Link
-            to="/products?category=thoi-trang-nam"
-            className="hover:text-primary transition-colors"
-          >
-            Thời trang nam
-          </Link>
-          <Link
-            to="/products?category=thoi-trang-nu"
-            className="hover:text-primary transition-colors"
-          >
-            Thời trang nữ
-          </Link>
-          <Link
-            to="/products?category=me-be"
-            className="hover:text-primary transition-colors"
-          >
-            Mẹ & Bé
-          </Link>
-          <Link
-            to="/products?category=nha-cua"
-            className="hover:text-primary transition-colors"
-          >
-            Nhà cửa
-          </Link>
+          {visibleCategories.map((category) => (
+            <Link
+              key={category.id}
+              to={`/products?categoryId=${category.id}`}
+              className="hover:text-primary transition-colors"
+            >
+              {category.name}
+            </Link>
+          ))}
           <Link
             to="/products?sale=flash"
             className="text-error hover:text-error/80 transition-colors font-medium"
@@ -273,30 +303,15 @@ export function Header() {
       {isMenuOpen && (
         <div className="md:hidden border-t border-border bg-background">
           <nav className="container mx-auto px-4 py-4 flex flex-col gap-3">
-            <Link
-              to="/products?category=dien-thoai"
-              className="py-2 hover:text-primary transition-colors"
-            >
-              Điện thoại
-            </Link>
-            <Link
-              to="/products?category=laptop"
-              className="py-2 hover:text-primary transition-colors"
-            >
-              Laptop
-            </Link>
-            <Link
-              to="/products?category=thoi-trang-nam"
-              className="py-2 hover:text-primary transition-colors"
-            >
-              Thời trang nam
-            </Link>
-            <Link
-              to="/products?category=thoi-trang-nu"
-              className="py-2 hover:text-primary transition-colors"
-            >
-              Thời trang nữ
-            </Link>
+            {visibleCategories.map((category) => (
+              <Link
+                key={category.id}
+                to={`/products?categoryId=${category.id}`}
+                className="py-2 hover:text-primary transition-colors"
+              >
+                {category.name}
+              </Link>
+            ))}
             <Link
               to="/products?sale=flash"
               className="py-2 text-error font-medium"

@@ -1,6 +1,19 @@
 import { apiRequest } from "./api-client";
 
 export interface CreateOrderRequest {
+  shippingAddressId?: string;
+  shippingAddress?: {
+    address: string;
+    districtId: number;
+    wardCode: string;
+    wardName?: string;
+    districtName?: string;
+    provinceName?: string;
+  };
+  weight: number;
+  length: number;
+  width: number;
+  height: number;
   receiver: {
     name?: string;
     phone?: string;
@@ -85,5 +98,5 @@ export const orderService = {
   getOrder: (id: string) => apiRequest<OrderResponse>(`/Order/${id}`),
 
   cancelOrder: (id: string, userId: string) =>
-    apiRequest<void>(`/Order/${id}?userId=${userId}`, { method: "DELETE" }),
+    apiRequest<void>(`/Order/${id}`, { method: "DELETE" }),
 };

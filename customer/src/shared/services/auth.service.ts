@@ -48,6 +48,12 @@ export const authService = {
       },
     ),
 
+  logout: () =>
+    apiRequest<{ success: boolean; message?: string }>("/auth/logout", {
+      method: "POST",
+      skipAuthRedirect: true,
+    }),
+
   sendOtp: (email: string) =>
     apiRequest<{ success: boolean; message?: string }>("/auth/send-otp", {
       method: "POST",

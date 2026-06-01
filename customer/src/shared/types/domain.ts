@@ -54,6 +54,7 @@ export interface Product {
 export interface Sku {
   id: string;
   productId: string;
+  skuCode?: string;
   skuValue: string;
   price: number;
   stock: number;
@@ -214,8 +215,8 @@ export const OrderStatusMap: Record<number, OrderStatus> = {
   0: "Pending",
   1: "Confirmed",
   2: "Shipping",
-  3: "Completed",
-  4: "Canceled",
+  3: "Canceled",
+  4: "Completed",
 };
 
 export const PaymentStatusMap: Record<number, PaymentStatus> = {
@@ -226,8 +227,8 @@ export const PaymentStatusMap: Record<number, PaymentStatus> = {
 };
 
 export const PaymentMethodMap: Record<number, PaymentMethod> = {
-  0: "COD",
-  1: "OnlineBanking",
+  0: "OnlineBanking",
+  1: "COD",
 };
 
 export const AddressLabelMap: Record<number, string> = {
