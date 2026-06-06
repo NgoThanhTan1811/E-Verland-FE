@@ -282,7 +282,7 @@ export const mockOrder: Order = {
     },
   ],
   subtotal: 29990000,
-  shippingFee: 50000,
+  shippingFee: 500,
   discount: 0,
   total: 30040000,
   status: 'shipping',

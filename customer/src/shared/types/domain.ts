@@ -120,7 +120,7 @@ export type OrderStatus =
   | "Shipping"
   | "Completed"
   | "Canceled";
-export type PaymentStatus = "Pending" | "Processing" | "Success" | "Failed";
+export type PaymentStatus = "Pending" | "Success" | "Failed" | "Refunded" | "Processing";
 export type PaymentMethod = "COD" | "OnlineBanking";
 
 export interface Order {
@@ -221,9 +221,9 @@ export const OrderStatusMap: Record<number, OrderStatus> = {
 
 export const PaymentStatusMap: Record<number, PaymentStatus> = {
   0: "Pending",
-  1: "Processing",
-  2: "Success",
-  3: "Failed",
+  1: "Success",
+  2: "Failed",
+  3: "Refunded",
 };
 
 export const PaymentMethodMap: Record<number, PaymentMethod> = {

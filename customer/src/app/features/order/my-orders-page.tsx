@@ -26,7 +26,7 @@ export function MyOrdersPage() {
       return;
     }
     fetchOrders();
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user?.id]);
 
   const fetchOrders = async () => {
     if (!user) return;
@@ -158,9 +158,12 @@ export function MyOrdersPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={async () => {
+                        type="button"
+                        onClick={async (event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
                           try {
-                            await orderService.cancelOrder(order.id, user!.id);
+                            await orderService.cancelOrder(order.id);
                             fetchOrders();
                           } catch (e: unknown) {
                             const { toast } = await import("sonner");

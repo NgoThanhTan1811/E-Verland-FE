@@ -5,7 +5,7 @@ export interface CreateOrderRequest {
   shippingAddress?: {
     address: string;
     districtId: number;
-    wardCode: string;
+    wardCode?: string;
     wardName?: string;
     districtName?: string;
     provinceName?: string;
@@ -17,7 +17,6 @@ export interface CreateOrderRequest {
   receiver: {
     name?: string;
     phone?: string;
-    address?: string;
   };
   paymentMethod: number;
   voucherCode?: number | null;
@@ -97,6 +96,6 @@ export const orderService = {
 
   getOrder: (id: string) => apiRequest<OrderResponse>(`/Order/${id}`),
 
-  cancelOrder: (id: string, userId: string) =>
+  cancelOrder: (id: string) =>
     apiRequest<void>(`/Order/${id}`, { method: "DELETE" }),
 };

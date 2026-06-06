@@ -50,6 +50,7 @@ export interface AddressRequest {
   provinceId?: number;
   districtId?: number;
   wardId?: number;
+  wardCode?: string; // GHN wardCode = String(wardId)
   street?: string;
   detail?: string;
   isDefault?: boolean;

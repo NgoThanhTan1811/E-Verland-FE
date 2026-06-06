@@ -34,6 +34,8 @@ import {
   PaymentMethodMap,
 } from "../../../shared/types/domain";
 import { toast } from "sonner";
+import { accountService } from "../../../shared/services/account.service";
+import { profileService } from "../../../shared/services/profile.service";
 
 export function OrderDetailPage() {
   const { orderId } = useParams();
@@ -44,6 +46,9 @@ export function OrderDetailPage() {
   const [shipping, setShipping] = useState<ShippingOrderResponse | null>(null);
   const [shippingLoading, setShippingLoading] = useState(false);
   const [payment, setPayment] = useState<PaymentResponse | null>(null);
+  const [paymentUrl, setPaymentUrl] = useState("");
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [switchingCOD, setSwitchingCOD] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated || !user) {
@@ -63,7 +68,7 @@ export function OrderDetailPage() {
       }
     };
     fetchOrder();
-  }, [orderId, isAuthenticated, user]);
+  }, [orderId, isAuthenticated, user?.id]);
 
   useEffect(() => {
     if (!order) return;
@@ -82,14 +87,58 @@ export function OrderDetailPage() {
         if (!isCancelled) setShippingLoading(false);
       });
 
-    if (order.paymentMethod === 1) {
+    if (order.paymentMethod === 0) {
       paymentService
         .getPaymentByOrder(order.id)
         .then((data) => {
-          if (!isCancelled) setPayment(data);
+          if (!isCancelled) {
+            setPayment(data);
+
+            // Check cache or construct QR URL
+            const cachedUrl = localStorage.getItem(`payment_url_${order.id}`);
+            if (cachedUrl) {
+              setPaymentUrl(cachedUrl);
+            } else if (data.code && data.amount) {
+              const constructedUrl = `https://qr.sepay.vn/img?bank=VPBank&acc=239688233&template=&amount=${data.amount}&des=${data.code}`;
+              setPaymentUrl(constructedUrl);
+              localStorage.setItem(`payment_url_${order.id}`, constructedUrl);
+            }
+          }
         })
         .catch(() => {
           if (!isCancelled) setPayment(null);
+
+          if (order.paymentStatus === 0) {
+            setPaymentLoading(true);
+            paymentService
+              .initiatePayment({
+                orderId: order.id,
+                userId: order.userId,
+                amount: order.grandTotal,
+                method: 0,
+                items: order.items.map((item) => ({
+                  skuId:
+                    item.skuId &&
+                      item.skuId !== "null" &&
+                      item.skuId !== "undefined"
+                      ? item.skuId
+                      : "00000000-0000-0000-0000-000000000000",
+                  quantity: item.quantity,
+                })),
+              })
+              .then((res) => {
+                if (!isCancelled && res.paymentUrl) {
+                  setPaymentUrl(res.paymentUrl);
+                  localStorage.setItem(`payment_url_${order.id}`, res.paymentUrl);
+                }
+              })
+              .catch((err) => {
+                console.error("Lỗi khi tải mã QR:", err);
+              })
+              .finally(() => {
+                if (!isCancelled) setPaymentLoading(false);
+              });
+          }
         });
     } else {
       setPayment(null);
@@ -98,7 +147,7 @@ export function OrderDetailPage() {
     return () => {
       isCancelled = true;
     };
-  }, [order]);
+  }, [order?.id, order?.paymentMethod, order?.paymentStatus]);
 
   const formatDate = (dateString: string) =>
     new Date(dateString).toLocaleDateString("vi-VN", {
@@ -117,11 +166,106 @@ export function OrderDetailPage() {
   const handleCancel = async () => {
     if (!order || !user) return;
     try {
-      await orderService.cancelOrder(order.id, user.id);
+      await orderService.cancelOrder(order.id);
       toast.success("Đã hủy đơn hàng");
       navigate("/my-orders");
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : "Không thể hủy đơn hàng");
+    }
+  };
+
+  const handleSwitchToCOD = async () => {
+    if (!order || !user) return;
+    setSwitchingCOD(true);
+    try {
+      const meRes = await accountService.me();
+      const profileId = meRes.profile?.id || user.profile?.id;
+      if (!profileId) throw new Error("Không tìm thấy thông tin hồ sơ tài khoản");
+
+      const addressesRes = await profileService.getAddresses(profileId);
+      const matchedAddress = addressesRes.find((addr) => {
+        if (!order.receiver?.address) return false;
+        const addressText = order.receiver.address.toLowerCase();
+        const prov = addr.province?.toLowerCase() || "";
+        const dist = addr.district?.toLowerCase() || "";
+        const wrd = addr.ward?.toLowerCase() || "";
+        return (
+          (prov !== "" && addressText.includes(prov)) &&
+          (dist !== "" && addressText.includes(dist)) &&
+          (wrd !== "" && addressText.includes(wrd))
+        );
+      }) || addressesRes[0];
+
+      if (!matchedAddress) {
+        throw new Error("Vui lòng thêm địa chỉ giao hàng trong hồ sơ trước khi đổi phương thức");
+      }
+
+      await orderService.cancelOrder(order.id);
+
+      const packageWeight = Math.max(1, order.items.reduce((sum, item) => sum + item.quantity, 0)) * 500;
+      const payload = {
+        shippingAddressId: matchedAddress.id,
+        shippingAddress: {
+          address: order.receiver?.address || matchedAddress.detail,
+          districtId: matchedAddress.districtId || 0,
+          wardCode: matchedAddress.wardCode || "",
+          wardName: matchedAddress.ward,
+          districtName: matchedAddress.district,
+          provinceName: matchedAddress.province,
+        },
+        weight: packageWeight,
+        length: 30,
+        width: 20,
+        height: 10,
+        receiver: {
+          name: order.receiver?.name || user.username,
+          phone: order.receiver?.phone || "",
+        },
+        paymentMethod: 1, // COD
+        items: order.items.map((item) => {
+          const skuId =
+            item.skuId &&
+              item.skuId.trim() !== "" &&
+              item.skuId !== "null" &&
+              item.skuId !== "undefined"
+              ? item.skuId
+              : "00000000-0000-0000-0000-000000000000";
+          return {
+            productId: item.productId,
+            skuId: skuId,
+            quantity: item.quantity,
+          };
+        }),
+      };
+
+      const newOrder = await orderService.createOrder(user.id, payload as any);
+      toast.success("Đã chuyển đổi sang phương thức thanh toán COD thành công!");
+      navigate(`/order/success/${newOrder.id}`);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Không thể chuyển phương thức thanh toán");
+    } finally {
+      setSwitchingCOD(false);
+    }
+  };
+
+  const handleCheckPaymentStatus = async () => {
+    if (!order) return;
+    setPaymentLoading(true);
+    try {
+      const paymentStatusRes = await paymentService.getPaymentByOrder(order.id);
+      if (paymentStatusRes && paymentStatusRes.status === 1) {
+        toast.success("Thanh toán thành công!");
+        const updatedOrder = await orderService.getOrder(order.id);
+        setOrder(updatedOrder);
+        setPayment(paymentStatusRes);
+      } else {
+        toast.info("Đơn hàng chưa được thanh toán hoặc đang xử lý. Vui lòng thử lại sau.");
+      }
+    } catch (error) {
+      console.error("Lỗi khi kiểm tra trạng thái thanh toán:", error);
+      toast.error("Không thể kiểm tra trạng thái thanh toán");
+    } finally {
+      setPaymentLoading(false);
     }
   };
 
@@ -322,11 +466,63 @@ export function OrderDetailPage() {
                       ? "Đã thanh toán"
                       : paymentStatus === "Failed"
                         ? "Thất bại"
-                        : paymentStatus === "Processing"
-                          ? "Đang xử lý"
-                          : "Chờ thanh toán"}
+                        : paymentStatus === "Pending"
+                          ? "Chờ thanh toán"
+                          : "Đang xử lý"}
                   </Badge>
                 </div>
+
+                {order.paymentMethod === 0 && paymentStatus !== "Success" && (
+                  <div className="mt-6 pt-6 border-t border-border space-y-4">
+                    <p className="text-center font-medium text-neutral-800 text-sm">
+                      Quét mã QR dưới đây để thanh toán trực tuyến qua SePay:
+                    </p>
+
+                    <div className="rounded-xl border border-neutral-200 bg-white overflow-hidden shadow-sm max-w-[240px] mx-auto">
+                      <div className="flex h-[240px] items-center justify-center p-2 bg-white">
+                        {paymentLoading ? (
+                          <div className="text-neutral-400 text-xs animate-pulse">
+                            Đang tải mã QR...
+                          </div>
+                        ) : paymentUrl ? (
+                          <img
+                            src={paymentUrl}
+                            alt="Mã QR thanh toán"
+                            className="max-h-full max-w-full object-contain"
+                          />
+                        ) : (
+                          <div className="text-neutral-400 text-xs">
+                            Không thể tải mã QR
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <p className="text-center text-xs text-neutral-500">
+                      Hệ thống tự động xác nhận đơn hàng sau khi nhận tiền.
+                    </p>
+
+                    <div className="space-y-2 pt-2">
+                      <Button
+                        variant="primary"
+                        onClick={handleCheckPaymentStatus}
+                        className="w-full text-xs font-semibold"
+                        disabled={paymentLoading || switchingCOD}
+                      >
+                        Kiểm tra thanh toán
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        onClick={handleSwitchToCOD}
+                        className="w-full text-xs font-semibold border-primary/20 text-primary hover:bg-primary/5"
+                        disabled={switchingCOD || paymentLoading}
+                      >
+                        {switchingCOD ? "Đang xử lý..." : "Đổi sang thanh toán COD"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -363,7 +559,12 @@ export function OrderDetailPage() {
               <Button
                 variant="danger"
                 className="w-full"
-                onClick={handleCancel}
+                type="button"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  handleCancel();
+                }}
               >
                 Hủy đơn hàng
               </Button>

@@ -226,11 +226,14 @@ export function AddressFormPage() {
     setIsLoading(true);
 
     try {
+      const wardIdNum = Number(formData.wardId);
       const payload = {
         label: Number(formData.label),
         provinceId: Number(formData.provinceId),
         districtId: Number(formData.districtId),
-        wardId: Number(formData.wardId),
+        wardId: wardIdNum,
+        // GHN wardCode = string của wardId, gửi cả hai để BE lưu
+        wardCode: wardIdNum ? String(wardIdNum) : undefined,
         street: formData.street,
         detail: formData.detail,
         isDefault: formData.isDefault,

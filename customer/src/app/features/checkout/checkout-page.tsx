@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { MapPin, CreditCard, Plus } from "lucide-react";
 import { Button } from "../../shared/ui/button";
@@ -7,7 +7,7 @@ import {
   cartService,
   CartItemResponse,
 } from "../../../shared/services/cart.service";
-import { orderService } from "../../../shared/services/order.service";
+import { orderService, OrderResponse } from "../../../shared/services/order.service";
 import {
   profileService,
   AddressResponse,
@@ -23,10 +23,7 @@ import {
   ProductResponse,
 } from "../../../shared/services/product.service";
 import { useAuth } from "../../../shared/contexts/auth-context";
-import {
-  AddressLabelMap,
-  PaymentMethodMap,
-} from "../../../shared/types/domain";
+import { AddressLabelMap } from "../../../shared/types/domain";
 import { toast } from "sonner";
 import { Link } from "react-router";
 import {
@@ -37,8 +34,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../../components/ui/dialog";
-
-export const SEPAY_QR_IMAGE_URL = import.meta.env.VITE_SEPAY_QR_IMAGE_URL;
 
 export function CheckoutPage() {
   const navigate = useNavigate();
@@ -62,7 +57,12 @@ export function CheckoutPage() {
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [paymentUrl, setPaymentUrl] = useState("");
   const [paymentOrderId, setPaymentOrderId] = useState("");
+  const [paymentOrderCode, setPaymentOrderCode] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState(0);
   const [paymentSecondsLeft, setPaymentSecondsLeft] = useState(15 * 60);
+
+  const [createdOrder, setCreatedOrder] = useState<OrderResponse | null>(null);
+  const isPaymentSuccessRef = useRef(false);
 
   const profileId = user?.profile?.id || "";
 
@@ -91,15 +91,15 @@ export function CheckoutPage() {
       const selectedItemIds = Array.isArray(location.state?.selectedItemIds)
         ? location.state.selectedItemIds
         : (() => {
-            try {
-              return JSON.parse(
-                sessionStorage.getItem("e-verland-cart-selected-item-ids") ||
-                  "[]",
-              ) as string[];
-            } catch {
-              return [];
-            }
-          })();
+          try {
+            return JSON.parse(
+              sessionStorage.getItem("e-verland-cart-selected-item-ids") ||
+              "[]",
+            ) as string[];
+          } catch {
+            return [];
+          }
+        })();
       const filteredItems = selectedItemIds.length
         ? (cart.items || []).filter((item) => selectedItemIds.includes(item.id))
         : cart.items || [];
@@ -142,6 +142,14 @@ export function CheckoutPage() {
 
   const selectedAddress = addresses.find((a) => a.id === selectedAddressId);
 
+  // GHN wardCode là string của wardId (vd: wardId=80412 → wardCode="80412")
+  const resolveWardCode = (addr: typeof selectedAddress): string | undefined => {
+    if (!addr) return undefined;
+    if (addr.wardCode && addr.wardCode.trim()) return addr.wardCode.trim();
+    if (addr.wardId) return String(addr.wardId);
+    return undefined;
+  };
+
   const resolveItemPrice = (item: CartItemResponse) => {
     const directPrice = Number(item.price) || 0;
     if (directPrice > 0) return directPrice;
@@ -150,11 +158,14 @@ export function CheckoutPage() {
     if (!product) return 0;
 
     const matchedSku = product.skus?.find((sku) => sku.id === item.skuId);
-    return Number(matchedSku?.price ?? product.price ?? 0) || 0;
+    const skuPrice = Number(matchedSku?.price) || 0;
+    if (skuPrice > 0) return skuPrice;
+
+    return Number(product.price) || 0;
   };
 
   useEffect(() => {
-    const fallbackFee = 50000;
+    const fallbackFee = 5000;
     const packageLength = 30;
     const packageWidth = 20;
     const packageHeight = 10;
@@ -181,8 +192,8 @@ export function CheckoutPage() {
     setShippingFeeLoading(true);
     shippingService
       .calculateFee({
-        toDistrictId: selectedAddress.districtId,
-        toWardCode: selectedAddress.wardCode || undefined,
+        toDistrictId: selectedAddress.districtId || 0,
+        ...(resolveWardCode(selectedAddress) ? { toWardCode: resolveWardCode(selectedAddress) } : {}),
         weight: estimatedWeight,
         length: Math.max(1, packageLength),
         width: Math.max(1, packageWidth),
@@ -216,11 +227,11 @@ export function CheckoutPage() {
     (sum, item) => sum + resolveItemPrice(item) * (Number(item.quantity) || 0),
     0,
   );
-  const finalShippingFee = subtotal >= 500000 ? 0 : shippingFee;
+  const finalShippingFee = subtotal >= 5000 ? 0 : shippingFee;
   const total = subtotal + finalShippingFee;
 
   useEffect(() => {
-    if (!paymentDialogOpen) return;
+    if (!createdOrder) return;
 
     setPaymentSecondsLeft(15 * 60);
     const startedAt = Date.now();
@@ -236,7 +247,34 @@ export function CheckoutPage() {
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [paymentDialogOpen]);
+  }, [createdOrder]);
+
+  useEffect(() => {
+    if (!createdOrder || createdOrder.paymentMethod !== 0) return;
+
+    let pollInterval: number | undefined;
+    pollInterval = window.setInterval(async () => {
+      try {
+        const paymentStatusRes = await paymentService.getPaymentByOrder(createdOrder.id);
+        if (paymentStatusRes && paymentStatusRes.status === 1) {
+          isPaymentSuccessRef.current = true;
+          window.clearInterval(pollInterval);
+          toast.success("Thanh toán thành công!");
+          handleClosePaymentDialog();
+          setCreatedOrder(null);
+          navigate(`/order/success/${createdOrder.id}`);
+        }
+      } catch (error) {
+        console.error("Lỗi khi kiểm tra trạng thái thanh toán:", error);
+      }
+    }, 3000);
+
+    return () => {
+      if (pollInterval) window.clearInterval(pollInterval);
+    };
+  }, [createdOrder]);
+
+
 
   const formatCountdown = (seconds: number) => {
     const minutes = Math.floor(seconds / 60)
@@ -244,6 +282,74 @@ export function CheckoutPage() {
       .padStart(2, "0");
     const secs = (seconds % 60).toString().padStart(2, "0");
     return `${minutes}:${secs}`;
+  };
+
+  const getOrderPayload = (paymentMethodValue: number) => {
+    if (!user) return null;
+    const profile = me?.profile || user.profile;
+    const receiverPhone = profile?.phoneNumber?.trim();
+    const receiverName = [profile?.lastName, profile?.firstName]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+
+    const receiverAddress = selectedAddress
+      ? [
+        selectedAddress.detail,
+        selectedAddress.street,
+        selectedAddress.ward,
+        selectedAddress.district,
+        selectedAddress.city,
+      ]
+        .filter(Boolean)
+        .join(", ")
+      : "";
+
+    const packageWeight =
+      Math.max(
+        1,
+        cartItems.reduce((sum, item) => sum + item.quantity, 0),
+      ) * 500;
+    const packageLength = 30;
+    const packageWidth = 20;
+    const packageHeight = 10;
+
+    return {
+      shippingAddressId: selectedAddress?.id,
+      shippingAddress: selectedAddress
+        ? {
+          address: receiverAddress,
+          districtId: selectedAddress.districtId || 0,
+          ...(resolveWardCode(selectedAddress) ? { wardCode: resolveWardCode(selectedAddress) } : {}),
+          wardName: selectedAddress.ward,
+          districtName: selectedAddress.district,
+          provinceName: selectedAddress.province,
+        }
+        : undefined,
+      weight: packageWeight,
+      length: packageLength,
+      width: packageWidth,
+      height: packageHeight,
+      receiver: {
+        name: receiverName || user.username,
+        phone: receiverPhone,
+      },
+      paymentMethod: paymentMethodValue,
+      items: cartItems.map((item) => {
+        const skuId =
+          item.skuId &&
+          item.skuId.trim() !== "" &&
+          item.skuId !== "null" &&
+          item.skuId !== "undefined"
+            ? item.skuId
+            : "00000000-0000-0000-0000-000000000000";
+        return {
+          productId: item.productId,
+          skuId: skuId,
+          quantity: item.quantity,
+        };
+      }),
+    };
   };
 
   const handlePlaceOrder = async () => {
@@ -259,11 +365,6 @@ export function CheckoutPage() {
 
     const profile = me?.profile || user.profile;
     const receiverPhone = profile?.phoneNumber?.trim();
-    const receiverName = [profile?.lastName, profile?.firstName]
-      .filter(Boolean)
-      .join(" ")
-      .trim();
-
     if (!receiverPhone) {
       toast.error(
         "Vui lòng cập nhật số điện thoại trong hồ sơ trước khi đặt hàng",
@@ -272,77 +373,46 @@ export function CheckoutPage() {
       return;
     }
 
+    const payload = getOrderPayload(selectedPayment);
+    if (!payload) return;
+
     setLoading(true);
     try {
-      const receiverAddress = selectedAddress
-        ? [
-            selectedAddress.detail,
-            selectedAddress.street,
-            selectedAddress.ward,
-            selectedAddress.district,
-            selectedAddress.city,
-          ]
-            .filter(Boolean)
-            .join(", ")
-        : "";
+      const order = await orderService.createOrder(user.id, payload);
 
-      const packageWeight =
-        Math.max(
-          1,
-          cartItems.reduce((sum, item) => sum + item.quantity, 0),
-        ) * 500;
-      const packageLength = 30;
-      const packageWidth = 20;
-      const packageHeight = 10;
-
-      const order = await orderService.createOrder(user.id, {
-        shippingAddressId: selectedAddress?.id,
-        shippingAddress: selectedAddress
-          ? {
-              address: receiverAddress,
-              districtId: selectedAddress.districtId || 0,
-              wardCode: selectedAddress.wardCode || "",
-              wardName: selectedAddress.ward,
-              districtName: selectedAddress.district,
-              provinceName: selectedAddress.province,
-            }
-          : undefined,
-        weight: packageWeight,
-        length: packageLength,
-        width: packageWidth,
-        height: packageHeight,
-        receiver: {
-          name: receiverName || user.username,
-          phone: receiverPhone,
-          address: receiverAddress,
-        },
-        paymentMethod: selectedPayment,
-        items: cartItems.map((item) => ({
-          productId: item.productId,
-          skuId: item.skuId,
-          quantity: item.quantity,
-        })),
-      });
-
-      const paymentMethod =
-        PaymentMethodMap[selectedPayment] || "OnlineBanking";
-
-      if (paymentMethod === "OnlineBanking") {
+      // Only initiate payment for OnlineBanking (0)
+      if (selectedPayment === 0) {
         const payment = await paymentService.initiatePayment({
           orderId: order.id,
           userId: user.id,
           amount: order.grandTotal || total,
-          method: paymentMethod,
-          items: cartItems.map((item) => ({
-            skuId: item.skuId,
-            quantity: item.quantity,
-          })),
+          method: selectedPayment,
+          items: cartItems.map((item) => {
+            const skuId =
+              item.skuId &&
+              item.skuId.trim() !== "" &&
+              item.skuId !== "null" &&
+              item.skuId !== "undefined"
+                ? item.skuId
+                : "00000000-0000-0000-0000-000000000000";
+            return {
+              skuId: skuId,
+              quantity: item.quantity,
+            };
+          }),
         });
 
         if (payment.paymentUrl) {
+          localStorage.setItem(`payment_url_${order.id}`, payment.paymentUrl);
+          setCreatedOrder(order);
           setPaymentUrl(payment.paymentUrl);
           setPaymentOrderId(order.id);
+          setPaymentOrderCode(order.code || "");
+          setPaymentAmount(order.grandTotal || total);
           setPaymentDialogOpen(true);
+          return;
+        } else {
+          toast.error("Không thể tạo liên kết thanh toán online");
           return;
         }
       }
@@ -364,13 +434,143 @@ export function CheckoutPage() {
     setPaymentDialogOpen(false);
     setPaymentUrl("");
     setPaymentOrderId("");
+    setPaymentOrderCode("");
+    setPaymentAmount(0);
     setPaymentSecondsLeft(15 * 60);
+  };
+
+  const handleCancelPayment = () => {
+    if (isPaymentSuccessRef.current) return;
+    setPaymentDialogOpen(false);
+    toast.info("Đơn hàng đã được tạo. Bạn có thể thanh toán tiếp qua mã QR hiển thị bên dưới hoặc đổi sang COD.");
+  };
+
+  const handleSwitchToCOD = async () => {
+    if (!createdOrder) return;
+    setLoading(true);
+    try {
+      await orderService.cancelOrder(createdOrder.id);
+      
+      const payload = getOrderPayload(1); // 1 = COD
+      if (!payload) throw new Error("Không thể tạo thông tin đơn hàng");
+
+      const newOrder = await orderService.createOrder(user.id, payload);
+      setCreatedOrder(null);
+      toast.success("Đã chuyển sang phương thức COD thành công!");
+      navigate(`/order/success/${newOrder.id}`);
+    } catch (error: unknown) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Không thể chuyển phương thức thanh toán",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelOrder = async () => {
+    if (!createdOrder) return;
+    setLoading(true);
+    try {
+      await orderService.cancelOrder(createdOrder.id);
+      setCreatedOrder(null);
+      handleClosePaymentDialog();
+      toast.success("Đơn hàng đã được hủy thành công!");
+    } catch (error: unknown) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Không thể hủy đơn hàng",
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (dataLoading) {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="h-96 bg-neutral-200 rounded-xl animate-pulse" />
+      </div>
+    );
+  }
+
+  if (createdOrder && createdOrder.paymentMethod === 0 && !isPaymentSuccessRef.current) {
+    return (
+      <div className="bg-neutral-50 min-h-screen py-12">
+        <div className="container mx-auto px-4 max-w-2xl">
+          <div className="bg-card rounded-2xl p-8 shadow-md border border-neutral-100 text-center space-y-6">
+            <div className="w-16 h-16 bg-warning/10 text-warning rounded-full flex items-center justify-center mx-auto text-3xl">
+              🕒
+            </div>
+            
+            <div className="space-y-2">
+              <h1 className="text-2xl font-bold text-neutral-900">Đơn hàng đang chờ thanh toán</h1>
+              <p className="text-neutral-500 text-sm">
+                Vui lòng hoàn tất thanh toán bằng QR code. Mã QR sẽ hết hạn sau <span className="font-semibold text-primary">{formatCountdown(paymentSecondsLeft)}</span>.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 rounded-xl border border-neutral-100 bg-neutral-50 p-4 text-sm text-left">
+              <div>
+                <p className="text-neutral-500 text-xs">Mã đơn hàng</p>
+                <p className="font-semibold text-base text-neutral-900">{paymentOrderCode || createdOrder.code}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-neutral-500 text-xs">Số tiền cần thanh toán</p>
+                <p className="font-bold text-lg text-primary">
+                  {(paymentAmount || createdOrder.grandTotal || total).toLocaleString("vi-VN")}₫
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-neutral-200 bg-white overflow-hidden shadow-sm max-w-sm mx-auto">
+              <div className="flex h-[320px] items-center justify-center bg-white p-4">
+                {paymentUrl ? (
+                  <img
+                    src={paymentUrl}
+                    alt="Mã QR thanh toán"
+                    className="max-h-full max-w-full object-contain animate-fade-in"
+                  />
+                ) : (
+                  <div className="text-neutral-400 text-sm">
+                    Đang tải mã QR thanh toán...
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-3 pt-4 border-t border-neutral-100 max-w-md mx-auto">
+              <Button
+                variant="primary"
+                onClick={() => setPaymentDialogOpen(true)}
+                className="w-full h-12 text-base"
+                disabled={loading}
+              >
+                Tiếp tục thanh toán (Hiện QR lớn)
+              </Button>
+              
+              <Button
+                variant="outline"
+                onClick={handleSwitchToCOD}
+                className="w-full h-12 text-base border-primary/20 hover:bg-primary/5 text-primary"
+                disabled={loading}
+              >
+                Đổi sang thanh toán khi nhận hàng (COD)
+              </Button>
+
+              <Button
+                variant="ghost"
+                onClick={handleCancelOrder}
+                className="w-full h-12 text-base text-neutral-500 hover:text-error hover:bg-error/5"
+                disabled={loading}
+              >
+                Hủy đơn hàng này
+              </Button>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -411,11 +611,10 @@ export function CheckoutPage() {
                   {addresses.map((address) => (
                     <label
                       key={address.id}
-                      className={`block p-4 border-2 rounded-lg cursor-pointer transition-all ${
-                        selectedAddressId === address.id
-                          ? "border-primary bg-primary/5"
-                          : "border-border hover:border-primary/50"
-                      }`}
+                      className={`block p-4 border-2 rounded-lg cursor-pointer transition-all ${selectedAddressId === address.id
+                        ? "border-primary bg-primary/5"
+                        : "border-border hover:border-primary/50"
+                        }`}
                     >
                       <input
                         type="radio"
@@ -609,62 +808,75 @@ export function CheckoutPage() {
         </div>
       </div>
 
-      <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
-        <DialogContent className="max-w-3xl">
+      <Dialog
+        open={paymentDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            handleCancelPayment();
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Quét QR để thanh toán</DialogTitle>
-            <DialogDescription>
-              QR sẽ hết hạn sau {formatCountdown(paymentSecondsLeft)}. Hoàn tất
+            <DialogTitle className="text-2xl font-bold text-center">Quét QR để thanh toán</DialogTitle>
+            <DialogDescription className="text-center text-neutral-500">
+              Mã QR sẽ hết hạn sau {formatCountdown(paymentSecondsLeft)}. Hoàn tất
               thanh toán trong thời gian này.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="rounded-xl border bg-white overflow-hidden min-h-[520px]">
-              <div className="flex h-[520px] items-center justify-center bg-white p-4">
-                <img
-                  src={SEPAY_QR_IMAGE_URL}
-                  alt="Mã QR thanh toán SePay"
-                  className="max-h-full max-w-full object-contain"
-                />
+          <div className="space-y-4 my-2">
+            <div className="grid grid-cols-2 gap-4 rounded-xl border border-neutral-100 bg-neutral-50 p-4 text-sm">
+              <div>
+                <p className="text-neutral-500 text-xs">Mã đơn hàng</p>
+                <p className="font-semibold text-base text-neutral-900">{paymentOrderCode || "Đang tải..."}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-neutral-500 text-xs">Số tiền cần thanh toán</p>
+                <p className="font-bold text-lg text-primary">
+                  {(paymentAmount || total).toLocaleString("vi-VN")}₫
+                </p>
               </div>
             </div>
 
-            <div className="flex items-center justify-between rounded-lg bg-primary/5 px-4 py-3 text-sm">
-              <span className="font-medium">Thời gian còn lại</span>
+            <div className="rounded-xl border border-neutral-200 bg-white overflow-hidden shadow-sm">
+              <div className="flex h-[420px] items-center justify-center bg-white p-4">
+                {paymentUrl ? (
+                  <img
+                    src={paymentUrl}
+                    alt="Mã QR thanh toán"
+                    className="max-h-full max-w-full object-contain animate-fade-in"
+                  />
+                ) : (
+                  <div className="text-neutral-400 text-sm">
+                    Đang tải mã QR thanh toán...
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between rounded-xl bg-primary/5 px-4 py-3 text-sm border border-primary/10">
+              <span className="font-medium text-neutral-700">Thời gian thanh toán còn lại</span>
               <span className="font-semibold text-primary">
                 {formatCountdown(paymentSecondsLeft)}
               </span>
             </div>
           </div>
 
-          <DialogFooter className="sm:justify-between">
-            <Button
-              variant="outline"
-              onClick={handleClosePaymentDialog}
-              className="sm:w-auto w-full"
-            >
-              Đóng
-            </Button>
-            <Button
-              onClick={() => {
-                const targetOrderId = paymentOrderId;
-                handleClosePaymentDialog();
-                if (targetOrderId) {
-                  navigate(`/order/success/${targetOrderId}`);
-                }
-              }}
-              className="sm:w-auto w-full"
-            >
-              Tôi đã thanh toán
-            </Button>
+          <DialogFooter className="sm:justify-center gap-2 border-t pt-4">
+            <div className="flex flex-col items-center gap-2 w-full">
+              <p className="text-xs text-neutral-500 text-center">
+                Sau khi thanh toán thành công, hệ thống sẽ tự động ghi nhận đơn hàng của bạn. Bạn có thể đóng hộp thoại này và xem trạng thái trong phần Quản lý đơn hàng.
+              </p>
+              <Button
+                variant="outline"
+                onClick={handleCancelPayment}
+                className="sm:w-auto w-full"
+              >
+                Đóng
+              </Button>
+            </div>
           </DialogFooter>
-
-          {paymentUrl && (
-            <p className="text-xs text-neutral-500 text-center break-all">
-              Link thanh toán dự phòng: {paymentUrl}
-            </p>
-          )}
         </DialogContent>
       </Dialog>
     </div>

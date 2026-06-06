@@ -119,6 +119,20 @@ export function CartPage() {
     }
   };
 
+  const resolveItemPrice = (item: CartItemResponse) => {
+    const directPrice = Number(item.price) || 0;
+    if (directPrice > 0) return directPrice;
+
+    const product = productMap[item.productId];
+    if (!product) return 0;
+
+    const matchedSku = product.skus?.find((sku) => sku.id === item.skuId);
+    const skuPrice = Number(matchedSku?.price) || 0;
+    if (skuPrice > 0) return skuPrice;
+
+    return Number(product.price) || 0;
+  };
+
   const selectedCartItems = cartItems.filter((item) =>
     selectedItemIds.includes(item.id),
   );
@@ -141,13 +155,10 @@ export function CartPage() {
     cartItems.length > 0 && selectedItemIds.length === cartItems.length;
   const someSelected = selectedItemIds.length > 0 && !allSelected;
   const subtotal = selectedCartItems.reduce(
-    (sum, item) =>
-      sum +
-      (Number(item.price) || Number(productMap[item.productId]?.price) || 0) *
-        (Number(item.quantity) || 0),
+    (sum, item) => sum + resolveItemPrice(item) * (Number(item.quantity) || 0),
     0,
   );
-  const shippingFee = subtotal >= 500000 ? 0 : 50000;
+  const shippingFee = subtotal >= 5000 ? 0 : 5000;
   const total = subtotal + shippingFee;
 
   const toggleItemSelection = (itemId: string, checked: boolean) => {
@@ -248,7 +259,7 @@ export function CartPage() {
                     <div className="flex-shrink-0">
                       <Link to={`/products/${firstItem.productId}`}>
                         {firstItem.productImage ||
-                        productImageMap[firstItem.productId] ? (
+                          productImageMap[firstItem.productId] ? (
                           <img
                             src={
                               firstItem.productImage ||
@@ -308,14 +319,7 @@ export function CartPage() {
 
                                 <div className="flex items-center justify-between gap-4">
                                   <span className="text-lg font-semibold text-primary">
-                                    {(
-                                      Number(item.price) ||
-                                      Number(
-                                        productMap[item.productId]?.price,
-                                      ) ||
-                                      0
-                                    ).toLocaleString("vi-VN")}
-                                    ₫
+                                    {resolveItemPrice(item).toLocaleString("vi-VN")}₫
                                   </span>
 
                                   <div className="flex items-center gap-4">
@@ -392,9 +396,9 @@ export function CartPage() {
                       : `${shippingFee.toLocaleString("vi-VN")}₫`}
                   </span>
                 </div>
-                {subtotal < 500000 && (
+                {subtotal < 500 && (
                   <p className="text-sm text-warning">
-                    Mua thêm {(500000 - subtotal).toLocaleString("vi-VN")}₫ để
+                    Mua thêm {(500 - subtotal).toLocaleString("vi-VN")}₫ để
                     được miễn phí vận chuyển
                   </p>
                 )}

@@ -9,14 +9,14 @@ export interface PaymentInitiateRequest {
   orderId: string;
   userId: string;
   amount: number;
-  method: "COD" | "OnlineBanking";
+  method: number; // 0 = OnlineBanking, 1 = COD (integer enum theo backend)
   items?: PaymentOrderItemRequest[];
 }
 
 export interface PaymentInitiateResponse {
   id: string;
   code?: string;
-  status: number;
+  status: string;
   paymentUrl?: string;
 }
 
