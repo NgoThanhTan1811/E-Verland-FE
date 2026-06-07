@@ -3,6 +3,7 @@ import { Landmark, Plus, Pencil, Trash2 } from "lucide-react";
 import { bankAccountApi, profileApi } from "../services/api";
 import type { User_AccountMeResDto, User_BankAccountResDto } from "../types";
 import { toast } from "sonner";
+import banksData from "../public/bank/banks.json";
 
 type BankOption = {
   name: string;
@@ -53,15 +54,9 @@ export function BankAccounts() {
     );
   };
 
-  const loadBanks = async () => {
+  const loadBanks = () => {
     try {
-      const response = await fetch("/bank/banks.json");
-      if (!response.ok) {
-        throw new Error(`Failed to load banks: ${response.status}`);
-      }
-
-      const data = await response.json();
-      setBanks(Array.isArray(data?.data) ? data.data : []);
+      setBanks(Array.isArray(banksData?.data) ? banksData.data : []);
     } catch (error) {
       console.error(error);
       setBanks([]);

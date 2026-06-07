@@ -14,6 +14,7 @@ import type {
   User_Gender,
 } from "../types";
 import { toast } from "sonner";
+import { locationService } from "../services/location";
 
 type ProfileForm = {
   firstName: string;
@@ -450,36 +451,52 @@ export function Profile() {
                     />
                   </label>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Province ID
-                    <input
+                    Province
+                    <select
                       value={addressForm.provinceId}
                       onChange={(e) =>
                         setAddressForm({
                           ...addressForm,
                           provinceId: e.target.value,
+                          districtId: "",
+                          wardId: "",
                         })
                       }
                       className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 dark:border-gray-700 dark:bg-gray-900"
                       required
-                    />
+                    >
+                      <option value="">Select Province</option>
+                      {locationService.getLocationDataSync().provinces.map((p) => (
+                        <option key={p.id} value={String(p.id)}>{p.name}</option>
+                      ))}
+                    </select>
                   </label>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    District ID
-                    <input
+                    District
+                    <select
                       value={addressForm.districtId}
                       onChange={(e) =>
                         setAddressForm({
                           ...addressForm,
                           districtId: e.target.value,
+                          wardId: "",
                         })
                       }
                       className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 dark:border-gray-700 dark:bg-gray-900"
                       required
-                    />
+                      disabled={!addressForm.provinceId}
+                    >
+                      <option value="">Select District</option>
+                      {locationService.getLocationDataSync().districts
+                        .filter((d) => d.provinceId === Number(addressForm.provinceId))
+                        .map((d) => (
+                          <option key={d.id} value={String(d.id)}>{d.name}</option>
+                        ))}
+                    </select>
                   </label>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Ward ID
-                    <input
+                    Ward
+                    <select
                       value={addressForm.wardId}
                       onChange={(e) =>
                         setAddressForm({
@@ -489,7 +506,15 @@ export function Profile() {
                       }
                       className="mt-2 w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 dark:border-gray-700 dark:bg-gray-900"
                       required
-                    />
+                      disabled={!addressForm.districtId}
+                    >
+                      <option value="">Select Ward</option>
+                      {locationService.getLocationDataSync().wards
+                        .filter((w) => w.districtId === Number(addressForm.districtId))
+                        .map((w) => (
+                          <option key={w.id} value={String(w.id)}>{w.name}</option>
+                        ))}
+                    </select>
                   </label>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 md:col-span-2">
                     Detail
@@ -534,7 +559,14 @@ export function Profile() {
                             {address.detail || address.street || "Address"}
                           </div>
                           <div className="text-sm text-gray-600 dark:text-gray-400">
-                            {address.street}{" "}
+                            {[
+                              address.street,
+                              address.ward || locationService.getWardName(address.wardId || 0),
+                              address.district || locationService.getDistrictName(address.districtId || 0),
+                              address.province || address.city || locationService.getProvinceName(address.provinceId || 0),
+                            ]
+                              .filter(Boolean)
+                              .join(", ")}{" "}
                             {address.isDefault ? "• Default" : ""}
                           </div>
                           <div className="text-xs text-gray-500 dark:text-gray-500 break-all">
