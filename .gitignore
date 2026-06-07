@@ -7,3 +7,6 @@ swagger-v1 (1).json
 **/dist/
 **/build/
 .env
+
+admin/
+seller/
