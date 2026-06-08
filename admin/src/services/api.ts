@@ -42,35 +42,20 @@ import type {
 const normalizeUrl = (url: string) => url.replace(/\/$/, "");
 
 // Get API URLs from environment variables
-const SELLER_API_URL = normalizeUrl(
-  import.meta.env.VITE_SELLER_URL || "http://localhost:3000/api/v1",
-);
-const USER_API_URL = normalizeUrl(
-  import.meta.env.VITE_USER_URL || "http://localhost:3000/api/v1",
+const ADMIN_API_URL = normalizeUrl(
+  import.meta.env.VITE_ADMIN_URL || "http://localhost:8080/api",
 );
 
-// Socket.IO URL (without /api/v1 path since Socket.IO is at root level)
+// Socket.IO URL (without /api path since Socket.IO is at root level)
 const SOCKET_IO_URL = normalizeUrl(
   import.meta.env.VITE_SOCKET_URL ||
-    SELLER_API_URL.replace(/\/api\/v1$/, "") ||
-    "http://localhost:3000",
+    ADMIN_API_URL.replace(/\/api$/, "") ||
+    "http://localhost:8080",
 );
-
-// Helper function to get access token from cookies
-function getAccessTokenFromCookies(): string | null {
-  const cookies = document.cookie.split(";");
-  for (const cookie of cookies) {
-    const [name, value] = cookie.trim().split("=");
-    if (name === "accessToken") {
-      return value;
-    }
-  }
-  return null;
-}
 
 // Helper function for API calls to seller endpoint
 async function apiCall<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${SELLER_API_URL}${endpoint}`, {
+  const response = await fetch(`${ADMIN_API_URL}${endpoint}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -80,6 +65,13 @@ async function apiCall<T>(endpoint: string, options?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.href = "/login";
+      throw new Error("Session expired. Please log in again.");
+    }
+
     // Try to get error details
     const contentType = response.headers.get("content-type");
     let errorMessage = `API request failed: ${response.status} ${response.statusText}`;
@@ -113,7 +105,7 @@ async function userApiCall<T>(
   endpoint: string,
   options?: RequestInit,
 ): Promise<T> {
-  const response = await fetch(`${USER_API_URL}${endpoint}`, {
+  const response = await fetch(`${ADMIN_API_URL}${endpoint}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
@@ -123,6 +115,13 @@ async function userApiCall<T>(
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.href = "/login";
+      throw new Error("Session expired. Please log in again.");
+    }
+
     const error = await response
       .json()
       .catch(() => ({ message: "Request failed" }));
@@ -139,7 +138,7 @@ async function userApiCall<T>(
 
 export const dashboardApi = {
   getDashboard: async (): Promise<DashboardResponseDto> => {
-    return apiCall<DashboardResponseDto>("/dashboard");
+    return apiCall<DashboardResponseDto>("/dashboard/admin");
   },
 
   // getRevenueTrends: async (): Promise<{ date: string; revenue: number }[]> => {
@@ -181,7 +180,7 @@ export const productApi = {
     ).toString();
 
     return apiCall<GetAllProductResponseDto>(
-      `/product${queryString ? `?${queryString}` : ""}`,
+      `/product/admin/search${queryString ? `?${queryString}` : ""}`,
     );
   },
 
@@ -207,9 +206,31 @@ export const productApi = {
     });
   },
 
-  delete: async (id: string): Promise<{ success: boolean }> => {
-    return apiCall<{ success: boolean }>(`/product/${id}`, {
+  delete: async (id: string, reason: string): Promise<{ success: boolean }> => {
+    return apiCall<{ success: boolean }>(`/admin/products/${id}`, {
       method: "DELETE",
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  hide: async (id: string, reason: string): Promise<{ success: boolean }> => {
+    return apiCall<{ success: boolean }>(`/admin/products/${id}/hide`, {
+      method: "PATCH",
+      body: JSON.stringify({ reason }),
+    });
+  },
+
+  changeStatus: async (id: string, status: string): Promise<any> => {
+    return apiCall<any>(`/product/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    });
+  },
+
+  restore: async (id: string, reason: string): Promise<{ success: boolean }> => {
+    return apiCall<{ success: boolean }>(`/admin/products/${id}/restore`, {
+      method: "PATCH",
+      body: JSON.stringify({ reason }),
     });
   },
 };
@@ -222,14 +243,24 @@ export const orderApi = {
   getAll: async (
     params?: OrderQueryParams,
   ): Promise<GetAllOrderResponseDto> => {
+    const queryParams: any = { ...params };
+    if (queryParams.startDate) {
+      queryParams.fromDate = queryParams.startDate;
+      delete queryParams.startDate;
+    }
+    if (queryParams.endDate) {
+      queryParams.toDate = queryParams.endDate;
+      delete queryParams.endDate;
+    }
+
     const queryString = new URLSearchParams(
-      Object.entries(params || {})
+      Object.entries(queryParams)
         .filter(([_, v]) => v !== undefined)
         .map(([k, v]) => [k, String(v)]),
     ).toString();
 
     return apiCall<GetAllOrderResponseDto>(
-      `/order${queryString ? `?${queryString}` : ""}`,
+      `/order/admin/order${queryString ? `?${queryString}` : ""}`,
     );
   },
 
@@ -238,9 +269,9 @@ export const orderApi = {
   },
 
   update: async (data: UpdateOrderDto): Promise<GetOrderByIdResponseDto> => {
-    return apiCall<GetOrderByIdResponseDto>("/order", {
-      method: "PUT",
-      body: JSON.stringify(data),
+    return apiCall<GetOrderByIdResponseDto>(`/order/admin/${data.id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: data.status }),
     });
   },
 
@@ -280,6 +311,26 @@ export const notificationApi = {
     });
   },
 
+  send: async (data: any): Promise<any> => {
+    return apiCall<any>("/notification/send", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  broadcast: async (data: any): Promise<any> => {
+    return apiCall<any>("/notification/broadcast", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  getConnectedUsers: async (): Promise<any> => {
+    return apiCall<any>("/notification/connected-users", {
+      method: "GET",
+    });
+  },
+
   delete: async (id: string): Promise<{ success: boolean }> => {
     return apiCall<{ success: boolean }>(`/notification/${id}`, {
       method: "DELETE",
@@ -289,7 +340,7 @@ export const notificationApi = {
   // SSE connection for real-time notifications
   subscribeSSE: (onMessage: (notification: NotificationItem) => void) => {
     const eventSource = new EventSource(
-      `${SELLER_API_URL}/notification/sse?stream=true`,
+      `${ADMIN_API_URL}/notification/sse?stream=true`,
       {
         withCredentials: true,
       },
@@ -329,10 +380,13 @@ export const chatApi = {
     return apiCall<GetAllMessagesResponseDto>(`/chat/message?${queryString}`);
   },
 
-  getConversations: async (params?: {
-    page?: number;
-    limit?: number;
-  }): Promise<GetAllConversationsResponseDto> => {
+  getConversations: async (
+    userId: string,
+    params?: {
+      page?: number;
+      limit?: number;
+    }
+  ): Promise<GetAllConversationsResponseDto> => {
     const queryString = new URLSearchParams(
       Object.entries(params || {})
         .filter(([_, v]) => v !== undefined)
@@ -340,7 +394,7 @@ export const chatApi = {
     ).toString();
 
     return apiCall<GetAllConversationsResponseDto>(
-      `/chat/conversation${queryString ? `?${queryString}` : ""}`,
+      `/chat/conversations/user/${userId}${queryString ? `?${queryString}` : ""}`,
     );
   },
 
@@ -390,9 +444,6 @@ export const chatApi = {
   ) => {
     // Dynamically import socket.io-client
     return import("socket.io-client").then(({ io }) => {
-      // Get access token from cookies for authentication
-      const accessToken = getAccessTokenFromCookies();
-
       const socketOptions: any = {
         withCredentials: true,
         transports: ["websocket", "polling"],
@@ -400,18 +451,6 @@ export const chatApi = {
           conversationId: conversationId,
         },
       };
-
-      // Add authentication if token is available
-      if (
-        accessToken &&
-        accessToken !== "undefined" &&
-        accessToken.trim() !== ""
-      ) {
-        socketOptions.auth = { token: accessToken };
-        socketOptions.extraHeaders = {
-          Authorization: `Bearer ${accessToken}`,
-        };
-      }
 
       // Connect to /message namespace (using SOCKET_IO_URL without /api/v1)
       const socketUrl = `${SOCKET_IO_URL}/message`;
@@ -510,154 +549,197 @@ export const chatApi = {
 // Video API
 // ============================================================================
 
-export const videoApi = {
-  getAll: async (
-    params?: VideoQueryParams,
-  ): Promise<GetAllVideosResponseDto> => {
+export const mediaApi = {
+  upload: async (data: any): Promise<any> => {
+    const formData = new FormData();
+    formData.append("resourceType", data.resourceType);
+    formData.append("objectId", data.objectId);
+    if (data.contentType) formData.append("contentType", data.contentType);
+    formData.append("mediaType", data.mediaType.toString());
+    formData.append("file", data.file);
+
+    const url = ADMIN_API_URL;
+    const response = await fetch(`${url}/media/upload`, {
+      method: "POST",
+      body: formData,
+      credentials: "include",
+    });
+    
+    if (!response.ok) {
+        throw new Error("Upload failed");
+    }
+    return response.json();
+  },
+
+  generatePresignedUploadUrl: async (data: any): Promise<any> => {
+    return apiCall<any>("/media/presigned-upload", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  getUrlById: async (id: string): Promise<any> => {
+    return apiCall<any>(`/media/${id}/url`);
+  },
+
+  getUrlByPath: async (data: any): Promise<any> => {
+    const queryString = new URLSearchParams(data).toString();
+    return apiCall<any>(`/media/url?${queryString}`);
+  },
+
+  delete: async (id: string): Promise<{ success: boolean }> => {
+    return apiCall<{ success: boolean }>(`/media/${id}`, {
+      method: "DELETE",
+    });
+  },
+};
+
+// ============================================================================
+// User API
+// ============================================================================
+
+export const userApi = {
+  getAll: async (params?: any): Promise<any> => {
     const queryString = new URLSearchParams(
       Object.entries(params || {})
         .filter(([_, v]) => v !== undefined)
         .map(([k, v]) => [k, String(v)]),
     ).toString();
 
-    return apiCall<GetAllVideosResponseDto>(
-      `/video${queryString ? `?${queryString}` : ""}`,
+    return apiCall<any>(
+      `/account${queryString ? `?${queryString}` : ""}`,
     );
   },
 
-  getById: async (id: string): Promise<GetVideoByIdResponseDto> => {
-    return apiCall<GetVideoByIdResponseDto>(`/video/${id}`);
+  getById: async (id: string): Promise<any> => {
+    return apiCall<any>(`/account/${id}`);
   },
 
-  upload: async (
-    data: CreateVideoDto,
-    onProgress?: (progress: number) => void,
-  ): Promise<VideoItem> => {
-    // Real API call using TUS protocol for resumable uploads
-    const TUS_ENDPOINT = import.meta.env.VITE_UPLOAD_URL;
+  create: async (data: any): Promise<any> => {
+    return apiCall<any>("/account", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
 
-    if (!TUS_ENDPOINT) {
-      throw new Error(
-        "TUS endpoint not configured. Please set VITE_UPLOAD_URL in .env file",
-      );
-    }
-
-    return new Promise((resolve, reject) => {
-      // Dynamically import tus-js-client
-      import("tus-js-client")
-        .then(({ Upload }) => {
-          const upload = new Upload(data.file, {
-            endpoint: TUS_ENDPOINT,
-            metadata: {
-              filename: data.file.name,
-              filetype: data.file.type,
-              title: data.title,
-              description: data.description || "",
-            },
-            onBeforeRequest: function (req) {
-              // Get underlying XMLHttpRequest object
-              const xhr = req.getUnderlyingObject();
-              // Enable credentials to send cookies with request
-              xhr.withCredentials = true;
-            },
-            retryDelays: [0, 1000, 3000, 5000],
-            onProgress: (uploaded, total) => {
-              const progress = Math.floor((uploaded / total) * 100);
-              onProgress?.(progress);
-            },
-            onSuccess: () => {
-              // Create response object matching GetAllVideoResponseDto
-              const videoResponse: VideoItem = {
-                id: `video-${Date.now()}`,
-                title: data.title,
-                description: data.description,
-                url: upload.url || "",
-                thumbnailUrl: "",
-                duration: 0,
-                status: "UPLOADED",
-                uploadedBy: "current-seller",
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-              };
-
-              console.log("Upload done!", upload.url);
-              resolve(videoResponse);
-            },
-            onError: (error) => {
-              console.error("Upload error:", error);
-              reject(new Error(error.message || "Upload failed"));
-            },
-          });
-
-          upload.start();
-        })
-        .catch((error) => {
-          console.error("Failed to load tus-js-client:", error);
-          reject(new Error("Failed to initialize upload client"));
-        });
+  update: async (id: string, data: any): Promise<any> => {
+    return apiCall<any>(`/account/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
     });
   },
 
   delete: async (id: string): Promise<{ success: boolean }> => {
-    return apiCall<{ success: boolean }>(`/video/${id}`, {
+    return apiCall<{ success: boolean }>(`/account/${id}`, {
+      method: "DELETE",
+    });
+  },
+
+  getByUsername: async (username: string): Promise<any> => {
+    return apiCall<any>(`/account/username/${encodeURIComponent(username)}`);
+  },
+
+  getByEmail: async (email: string): Promise<any> => {
+    return apiCall<any>(`/account/email/${encodeURIComponent(email)}`);
+  },
+
+  resolveUserId: async (input: string): Promise<string> => {
+    const query = input.trim();
+    if (!query) throw new Error("Empty user identifier");
+
+    const getIdFromAcc = (acc: any) => {
+      if (!acc) return null;
+      if (acc.id) return acc.id;
+      if (acc.Id) return acc.Id;
+      if (acc.data?.id) return acc.data.id;
+      if (acc.data?.Id) return acc.data.Id;
+      return null;
+    };
+
+    if (query.includes("@")) {
+      try {
+        const acc = await userApi.getByEmail(query);
+        const id = getIdFromAcc(acc);
+        if (id) return id;
+        throw new Error("Missing ID in response: " + JSON.stringify(acc).substring(0, 50));
+      } catch (e: any) {
+        throw new Error(`User not found by email: ${e.message}`);
+      }
+    } else if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(query)) {
+      try {
+        const acc = await userApi.getByUsername(query);
+        const id = getIdFromAcc(acc);
+        if (id) return id;
+        throw new Error("Missing ID in response: " + JSON.stringify(acc).substring(0, 50));
+      } catch (e: any) {
+        throw new Error(`User not found by username: ${e.message}`);
+      }
+    }
+
+    return query;
+  },
+};
+
+export const profileApi = {
+  getByAccount: async (accountId: string): Promise<any> => {
+    return apiCall<any>(`/profile/account/${accountId}`);
+  },
+  create: async (accountId: string, data: any): Promise<any> => {
+    return apiCall<any>(`/profile?accountId=${accountId}`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+  update: async (accountId: string, data: any): Promise<any> => {
+    return apiCall<any>(`/profile/${accountId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
+};
+
+export const addressApi = {
+  getByProfile: async (profileId: string): Promise<any> => {
+    return apiCall<any>(`/profile/${profileId}/address`);
+  },
+  create: async (profileId: string, data: any): Promise<any> => {
+    return apiCall<any>(`/profile/${profileId}/address`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+  update: async (profileId: string, id: string, data: any): Promise<any> => {
+    return apiCall<any>(`/profile/${profileId}/address/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
+  delete: async (profileId: string, id: string): Promise<any> => {
+    return apiCall<any>(`/profile/${profileId}/address/${id}`, {
       method: "DELETE",
     });
   },
 };
 
-// ============================================================================
-// Review API
-// ============================================================================
-
-export const reviewApi = {
-  getAll: async (
-    params?: ReviewQueryParams,
-  ): Promise<GetAllReviewResponseDto> => {
-    const queryString = new URLSearchParams(
-      Object.entries(params || {})
-        .filter(([_, v]) => v !== undefined)
-        .map(([k, v]) => [k, String(v)]),
-    ).toString();
-
-    return apiCall<GetAllReviewResponseDto>(
-      `/review${queryString ? `?${queryString}` : ""}`,
-    );
+export const bankApi = {
+  getByProfile: async (profileId: string): Promise<any> => {
+    return apiCall<any>(`/profile/${profileId}/bankaccount`);
   },
-
-  createReply: async (
-    data: CreateReplyDto,
-  ): Promise<GetAllReviewResponseDto> => {
-    return apiCall<GetAllReviewResponseDto>("/reply", {
+  create: async (profileId: string, data: any): Promise<any> => {
+    return apiCall<any>(`/profile/${profileId}/bankaccount`, {
       method: "POST",
       body: JSON.stringify(data),
     });
   },
-
-  updateReply: async (
-    data: UpdateReplyDto,
-  ): Promise<GetAllReviewResponseDto> => {
-    return apiCall<GetAllReviewResponseDto>("/reply", {
-      method: "PUT",
+  update: async (profileId: string, id: string, data: any): Promise<any> => {
+    return apiCall<any>(`/profile/${profileId}/bankaccount/${id}`, {
+      method: "PATCH",
       body: JSON.stringify(data),
     });
   },
-
-  deleteReply: async (id: string): Promise<{ success: boolean }> => {
-    return apiCall<{ success: boolean }>(`/reply/${id}`, {
+  delete: async (profileId: string, id: string): Promise<any> => {
+    return apiCall<any>(`/profile/${profileId}/bankaccount/${id}`, {
       method: "DELETE",
-    });
-  },
-};
-
-// ============================================================================
-// Report API (uses USER API endpoint)
-// ============================================================================
-
-export const reportApi = {
-  create: async (data: CreateReportDto): Promise<GetReportResponseDto> => {
-    return userApiCall<GetReportResponseDto>("/report", {
-      method: "POST",
-      body: JSON.stringify(data),
     });
   },
 };
@@ -671,6 +753,12 @@ export const authApi = {
     return userApiCall<{ message: string }>("/auth/change-password", {
       method: "POST",
       body: JSON.stringify({ email }),
+    });
+  },
+  
+  logout: async (): Promise<any> => {
+    return userApiCall<any>("/auth/logout", {
+      method: "POST",
     });
   },
 };
@@ -719,6 +807,26 @@ export const categoryApi = {
   getById: async (id: string): Promise<GetCategoryByIdResponseDto> => {
     return userApiCall<GetCategoryByIdResponseDto>(`/category/${id}`);
   },
+
+  create: async (data: any): Promise<any> => {
+    return userApiCall<any>("/category", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  update: async (id: string, data: any): Promise<any> => {
+    return userApiCall<any>(`/category/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  delete: async (id: string): Promise<any> => {
+    return userApiCall<any>(`/category/${id}`, {
+      method: "DELETE",
+    });
+  },
 };
 
 // ============================================================================
@@ -735,12 +843,81 @@ export const brandApi = {
     if (params?.limit) queryParams.append("limit", params.limit.toString());
 
     const queryString = queryParams.toString();
-    const endpoint = queryString ? `/brand?${queryString}` : "/brand";
+    const endpoint = queryString ? `/brand/search/brand?${queryString}` : "/brand/search/brand";
 
     return userApiCall<GetAllBrandsResponseDto>(endpoint);
   },
 
   getById: async (id: string): Promise<GetBrandByIdResponseDto> => {
     return userApiCall<GetBrandByIdResponseDto>(`/brand/${id}`);
+  },
+
+  create: async (data: any): Promise<any> => {
+    return userApiCall<any>("/brand", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  update: async (id: string, data: any): Promise<any> => {
+    return userApiCall<any>(`/brand/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  delete: async (id: string): Promise<any> => {
+    return userApiCall<any>(`/brand/${id}`, {
+      method: "DELETE",
+    });
+  },
+};
+
+// ============================================================================
+// Sku API
+// ============================================================================
+
+export const skuApi = {
+  create: async (data: any): Promise<any> => {
+    return apiCall<any>("/sku", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+  
+  update: async (id: string, data: any): Promise<any> => {
+    return apiCall<any>(`/sku/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+  
+  addSkusToProduct: async (productId: string, variants: any[], stock: number): Promise<any> => {
+    return apiCall<any>(`/sku/products/${productId}/skus`, {
+      method: "POST",
+      body: JSON.stringify({ variants, stock }),
+    });
+  },
+  
+  delete: async (id: string): Promise<any> => {
+    return apiCall<any>(`/sku/${id}`, {
+      method: "DELETE",
+    });
+  },
+  
+  getById: async (id: string): Promise<any> => {
+    return apiCall<any>(`/sku/${id}`);
+  },
+  
+  getAll: async (params?: any): Promise<any> => {
+    const queryString = new URLSearchParams(
+      Object.entries(params || {})
+        .filter(([_, v]) => v !== undefined)
+        .map(([k, v]) => [k, String(v)]),
+    ).toString();
+
+    return apiCall<any>(
+      `/sku/admin/search${queryString ? `?${queryString}` : ""}`,
+    );
   },
 };

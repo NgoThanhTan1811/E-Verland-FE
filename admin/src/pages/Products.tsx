@@ -7,8 +7,11 @@ import {
   Edit2,
   Trash2,
   Eye,
+  EyeOff,
+  RefreshCw,
   Package,
 } from "lucide-react";
+import { toast } from "sonner";
 import { productApi } from "../services/api";
 import type {
   ProductListItem,
@@ -16,6 +19,7 @@ import type {
   ProductQueryParams,
 } from "../types";
 import { useLanguage } from "../contexts/LanguageContext";
+import { PaginationControls } from "../components/PaginationControls";
 
 export function Products() {
   const { t } = useLanguage();
@@ -28,6 +32,13 @@ export function Products() {
     status: undefined,
     name: "",
   });
+  
+  const [moderation, setModeration] = useState<{
+    isOpen: boolean;
+    action: "hide" | "restore" | "delete";
+    productId: string;
+    reason: string;
+  }>({ isOpen: false, action: "hide", productId: "", reason: "" });
 
   useEffect(() => {
     loadProducts();
@@ -37,10 +48,9 @@ export function Products() {
     try {
       setLoading(true);
       const response = await productApi.getAll(filters);
-      // Handle response structure: { data: { products: Product[], totalItems, ... } }
-      const products = response.data?.products || [];
+      const products = response.items || response.data?.products || response.data?.items || [];
       setProducts(Array.isArray(products) ? products : []);
-      setTotal(response.data?.totalItems || 0);
+      setTotal(response.totalItems || response.data?.totalItems || 0);
     } catch (error: any) {
       console.error("Failed to load products:", error);
       // Handle ProductNotFound as empty list instead of error
@@ -56,15 +66,24 @@ export function Products() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this product?")) return;
-
+  const executeModeration = async () => {
+    const { action, productId, reason } = moderation;
+    if (!reason.trim()) {
+      toast.error("Moderation reason is required");
+      return;
+    }
+    
     try {
-      await productApi.delete(id);
+      if (action === "hide") await productApi.hide(productId, reason);
+      if (action === "restore") await productApi.restore(productId, reason);
+      if (action === "delete") await productApi.delete(productId, reason);
+      
+      toast.success(`Product ${action}d successfully`);
+      setModeration({ ...moderation, isOpen: false, reason: "" });
       loadProducts();
     } catch (error) {
-      console.error("Failed to delete product:", error);
-      alert("Failed to delete product");
+      console.error(`Failed to ${action} product:`, error);
+      toast.error(`Failed to ${action} product`);
     }
   };
 
@@ -220,13 +239,13 @@ export function Products() {
                       {product.name}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
-                      {product.basePrice.toLocaleString()} VND
+                      {product.basePrice?.toLocaleString()} đ
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
-                      {product.virtualPrice.toLocaleString()} VND
+                      {product.virtualPrice?.toLocaleString()} đ
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
-                      {product.averageRate.toFixed(1)}
+                      {(product.averageRate || 0).toFixed(1)}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900 dark:text-white">
                       {product.soldCount}
@@ -256,7 +275,21 @@ export function Products() {
                           <Edit2 className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                         </Link>
                         <button
-                          onClick={() => handleDelete(product.id)}
+                          onClick={() => setModeration({ isOpen: true, action: "hide", productId: product.id, reason: "" })}
+                          className="p-2 hover:bg-yellow-50 dark:hover:bg-yellow-950 rounded-lg transition-colors"
+                          title="Hide Product"
+                        >
+                          <EyeOff className="w-4 h-4 text-yellow-600 dark:text-yellow-400" />
+                        </button>
+                        <button
+                          onClick={() => setModeration({ isOpen: true, action: "restore", productId: product.id, reason: "" })}
+                          className="p-2 hover:bg-green-50 dark:hover:bg-green-950 rounded-lg transition-colors"
+                          title="Restore Product"
+                        >
+                          <RefreshCw className="w-4 h-4 text-green-600 dark:text-green-400" />
+                        </button>
+                        <button
+                          onClick={() => setModeration({ isOpen: true, action: "delete", productId: product.id, reason: "" })}
                           className="p-2 hover:bg-red-50 dark:hover:bg-red-950 rounded-lg transition-colors"
                           title={t.products.delete}
                         >
@@ -273,37 +306,54 @@ export function Products() {
 
         {/* Pagination */}
         {!loading && total > 0 && (
-          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between">
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              {t.common.showing}{" "}
-              {((filters.page || 1) - 1) * (filters.limit || 10) + 1}{" "}
-              {t.common.to}{" "}
-              {Math.min((filters.page || 1) * (filters.limit || 10), total)}{" "}
-              {t.common.of} {total} {t.products.title.toLowerCase()}
-            </div>
-            <div className="flex gap-2">
+          <PaginationControls
+            page={filters.page || 1}
+            limit={filters.limit || 10}
+            total={total}
+            onPageChange={(page) => setFilters({ ...filters, page })}
+            itemName={t.products.title.toLowerCase()}
+          />
+        )}
+      </div>
+
+      {/* Moderation Modal */}
+      {moderation.isOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+          <div className="bg-white dark:bg-gray-900 rounded-xl p-6 w-full max-w-md shadow-xl border border-gray-200 dark:border-gray-800">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 capitalize">
+              {moderation.action} Product
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+              Please provide a reason for this moderation action.
+            </p>
+            <textarea
+              className="w-full border border-gray-300 dark:border-gray-700 rounded-lg p-3 bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 mb-6"
+              rows={3}
+              placeholder="Enter reason..."
+              value={moderation.reason}
+              onChange={(e) => setModeration({ ...moderation, reason: e.target.value })}
+            ></textarea>
+            <div className="flex justify-end gap-3">
               <button
-                onClick={() =>
-                  setFilters({ ...filters, page: (filters.page || 1) - 1 })
-                }
-                disabled={filters.page === 1}
-                className="px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-800 text-gray-800 dark:text-gray-200 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-700"
+                onClick={() => setModeration({ ...moderation, isOpen: false, reason: "" })}
               >
-                {t.common.previous}
+                Cancel
               </button>
               <button
-                onClick={() =>
-                  setFilters({ ...filters, page: (filters.page || 1) + 1 })
-                }
-                disabled={(filters.page || 1) * (filters.limit || 10) >= total}
-                className="px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className={`px-4 py-2 text-white rounded-lg capitalize ${
+                  moderation.action === "delete" ? "bg-red-600 hover:bg-red-700" :
+                  moderation.action === "hide" ? "bg-yellow-600 hover:bg-yellow-700" :
+                  "bg-green-600 hover:bg-green-700"
+                }`}
+                onClick={executeModeration}
               >
-                {t.common.next}
+                {moderation.action}
               </button>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

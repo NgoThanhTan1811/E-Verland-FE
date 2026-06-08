@@ -9,7 +9,7 @@ export const APP_CONFIG = {
   
   // API Configuration
   api: {
-    baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api/v1',
+    baseURL: import.meta.env.VITE_ADMIN_URL || 'http://localhost:8080/api/',
     timeout: 30000, // 30 seconds
   },
 
@@ -90,32 +90,16 @@ export const APP_CONFIG = {
   // Status Colors
   statusColors: {
     product: {
-      ACTIVE: 'green',
-      INACTIVE: 'gray',
-      DRAFT: 'yellow',
+      Published: 'green',
+      Inactive: 'gray',
+      Draft: 'yellow',
     },
     order: {
-      CREATING: 'gray',
-      PENDING: 'yellow',
-      CONFIRMED: 'blue',
-      SHIPPING: 'purple',
-      COMPLETED: 'green',
-      CANCELLED: 'red',
-      REFUNDED: 'orange',
-    },
-    video: {
-      UPLOADING: 'blue',
-      UPLOADED: 'purple',
-      PROCESSING: 'yellow',
-      READY: 'green',
-      FAILED: 'red',
-      DELETED: 'gray',
-    },
-    report: {
-      PENDING: 'yellow',
-      REVIEWING: 'blue',
-      RESOLVED: 'green',
-      REJECTED: 'red',
+      Pending: 'yellow',
+      Confirmed: 'blue',
+      Shipping: 'purple',
+      Completed: 'green',
+      Canceled: 'red',
     },
   },
 

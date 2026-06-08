@@ -30,7 +30,7 @@ export function ProductDetail() {
     try {
       setLoading(true);
       const response = await productApi.getById(productId);
-      setProduct(response.data);
+      setProduct(response.data || response);
     } catch (error) {
       console.error("Failed to load product:", error);
       alert("Failed to load product. Returning to product list.");
@@ -42,14 +42,14 @@ export function ProductDetail() {
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
-      ACTIVE:
+      Published:
         "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400",
-      INACTIVE: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400",
-      DRAFT:
+      Inactive: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400",
+      Draft:
         "bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400",
-      BANNED: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400",
+      OutOfStock: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400",
     };
-    return colors[status] || colors.INACTIVE;
+    return colors[status] || colors.Inactive;
   };
 
   if (loading) {
@@ -107,7 +107,7 @@ export function ProductDetail() {
               Product Images
             </h2>
             <div className="space-y-4">
-              {product.images.map((image, index) => (
+              {(product.images || []).map((image, index) => (
                 <div
                   key={index}
                   className="aspect-square rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800"
@@ -122,7 +122,7 @@ export function ProductDetail() {
                   />
                 </div>
               ))}
-              {product.images.length === 0 && (
+              {(product.images || []).length === 0 && (
                 <div className="aspect-square rounded-lg bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
                   <Package className="w-16 h-16 text-gray-400" />
                 </div>
@@ -160,7 +160,7 @@ export function ProductDetail() {
                     Rating
                   </p>
                   <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {product.averageRate.toFixed(1)} ({product.ratingCount})
+                    {(product.averageRate || 0).toFixed(1)} ({product.ratingCount || 0})
                   </p>
                 </div>
               </div>
@@ -340,13 +340,13 @@ export function ProductDetail() {
           </div>
 
           {/* Categories */}
-          {product.categories.length > 0 && (
+          {(product.categories || []).length > 0 && (
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                 Categories
               </h2>
               <div className="flex flex-wrap gap-2">
-                {product.categories.map((category) => (
+                {(product.categories || []).map((category) => (
                   <div
                     key={category.id}
                     className="flex items-center gap-2 px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg"
@@ -368,19 +368,19 @@ export function ProductDetail() {
           )}
 
           {/* Variants */}
-          {product.variants.length > 0 && (
+          {(product.variants || []).length > 0 && (
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                 Variants
               </h2>
               <div className="space-y-4">
-                {product.variants.map((variant, index) => (
+                {(product.variants || []).map((variant, index) => (
                   <div key={index}>
                     <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                       {variant.value}
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {variant.options.map((option, optIndex) => (
+                      {(variant.options || []).map((option, optIndex) => (
                         <span
                           key={optIndex}
                           className="px-3 py-1 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg text-sm"
@@ -396,13 +396,13 @@ export function ProductDetail() {
           )}
 
           {/* Attributes */}
-          {product.attributes.length > 0 && (
+          {(product.attributes || []).length > 0 && (
             <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                 Attributes
               </h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {product.attributes.map((attribute, index) => (
+                {(product.attributes || []).map((attribute, index) => (
                   <div key={index} className="flex items-center gap-2">
                     <Tag className="w-4 h-4 text-gray-400" />
                     <span className="text-gray-600 dark:text-gray-400">
@@ -418,10 +418,10 @@ export function ProductDetail() {
           )}
 
           {/* SKUs */}
-          {product.skus.length > 0 && (
-            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6">
+          {(product.skus || []).length > 0 && (
+            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 shadow-sm mb-8">
               <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                SKUs ({product.skus.length})
+                SKUs ({(product.skus || []).length})
               </h2>
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -442,7 +442,7 @@ export function ProductDetail() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-                    {product.skus.map((sku) => (
+                    {(product.skus || []).map((sku) => (
                       <tr key={sku.id}>
                         <td className="px-4 py-3 text-sm text-gray-900 dark:text-white">
                           {sku.value}

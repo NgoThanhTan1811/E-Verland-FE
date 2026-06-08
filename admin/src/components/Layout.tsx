@@ -64,14 +64,15 @@ export function Layout({
       label: t.nav.chat,
       badge: unreadMessages,
     },
-    { path: "/videos", icon: Video, label: t.nav.videos },
-    { path: "/reviews", icon: Star, label: t.nav.reviews },
-    { path: "/reports", icon: FileText, label: t.nav.reports },
+    { path: "/categories", icon: Package, label: t.nav.categories || "Categories" },
+    { path: "/brands", icon: Star, label: t.nav.brands || "Brands" },
+    { path: "/users", icon: User, label: t.nav.users || "Users" },
+    { path: "/media", icon: Video, label: t.nav.media || "Media" },
   ];
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     // Clear authentication
-    logout();
+    await logout();
 
     // Show success toast
     toast.success("Logged out successfully", {
@@ -191,40 +192,6 @@ export function Layout({
                   </button>
                 </div>
               </div>
-
-              {/* Shop Button */}
-              <Link
-                to={`${import.meta.env.VITE_USER_URL || "/"}`}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:from-blue-600 hover:to-purple-700 transition-all shadow-sm hover:shadow-md"
-                title="Buy"
-              >
-                <Store className="w-4 h-4" />
-                <span className="hidden sm:inline text-sm font-medium">
-                  Buy
-                </span>
-              </Link>
-
-              {/* Notification Bell */}
-              <Link
-                to="/notifications"
-                className="relative p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
-              >
-                <Bell className="w-5 h-5" />
-                {unreadNotifications > 0 && (
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-                )}
-              </Link>
-
-              {/* Chat Shortcut */}
-              <Link
-                to="/chat"
-                className="relative p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800"
-              >
-                <MessageSquare className="w-5 h-5" />
-                {unreadMessages > 0 && (
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-                )}
-              </Link>
 
               {/* User Avatar */}
               <div className="flex items-center gap-2 pl-3 border-l border-gray-200 dark:border-gray-800">

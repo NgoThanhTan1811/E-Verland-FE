@@ -4,13 +4,11 @@
 
 // Common Types
 export type OrderStatus =
-  | "CREATING"
-  | "PENDING"
-  | "CONFIRMED"
-  | "SHIPPING"
-  | "COMPLETED"
-  | "CANCELLED"
-  | "REFUNDED";
+  | "Pending"
+  | "Confirmed"
+  | "Shipping"
+  | "Canceled"
+  | "Completed";
 
 export type ProductStatus =
   | "Draft"
@@ -18,30 +16,9 @@ export type ProductStatus =
   | "Inactive"
   | "OutOfStock";
 
-export type VideoStatus =
-  | "UPLOADING"
-  | "UPLOADED"
-  | "PROCESSING"
-  | "READY"
-  | "FAILED"
-  | "DELETED";
-
-export type ReportStatus = "PENDING" | "REVIEWING" | "RESOLVED" | "REJECTED";
-
-export type ReportCategory =
-  | "SPAM"
-  | "INAPPROPRIATE"
-  | "SCAM"
-  | "COPYRIGHT"
-  | "OTHER";
-
-export type TargetType = "PRODUCT" | "REVIEW" | "USER" | "ORDER";
-
-export type NotificationType =
-  | "ORDER_UPDATE"
-  | "PROMOTION"
-  | "WALLET_UPDATE"
-  | "TRUST_ME_BRO_UPDATE";
+export type MediaType = "Image" | "Video";
+export type MediaFileStatus = "Pending" | "Confirmed" | "Orphan";
+export type MediaResourceType = "Products" | "Avatars" | "Shops" | "Reviews";
 
 // Dashboard DTOs
 export interface DashboardData {
@@ -54,6 +31,12 @@ export interface DashboardData {
   };
   products: {
     totalProducts: number;
+  };
+  ledger?: {
+    platformCash: number;
+    customerLiability: number;
+    sellerPending: number;
+    sellerAvailable: number;
   };
 }
 
@@ -295,8 +278,8 @@ export interface OrderItemSnapshot {
   price: number;
 }
 
-export type PaymentMethod = "COD" | "BANK_TRANSFER" | "E_WALLET";
-export type PaymentStatus = "PENDING" | "PAID" | "FAILED" | "REFUNDED";
+export type PaymentMethod = "OnlineBanking" | "COD";
+export type PaymentStatus = "Pending" | "Success" | "Failed" | "Refunded";
 
 export interface OrderDetail {
   id: string;
@@ -342,7 +325,7 @@ export interface UpdateOrderDto {
 export interface NotificationItem {
   id: string;
   userId: string;
-  type: NotificationType;
+  type: string;
   title: string;
   description: string;
   link: string;
@@ -386,14 +369,12 @@ export interface UpdateNotificationResponseDto {
 }
 
 // Chat DTOs
-export type MessageType = "TEXT" | "IMAGE" | "VIDEO" | "FILE";
-
 export interface ChatMessage {
   id: string;
   conversationId: string;
   senderId: string;
   content: string;
-  type: MessageType;
+  type: string;
   metadata?: string;
   createdAt: string;
 }
@@ -475,7 +456,7 @@ export interface VideoItem {
   url: string;
   thumbnailUrl?: string;
   duration?: number;
-  status: VideoStatus;
+  status: MediaFileStatus;
   uploadedBy: string;
   createdAt: string;
   updatedAt: string;
@@ -573,8 +554,8 @@ export interface UpdateReplyDto {
 // Report DTOs
 export interface CreateReportDto {
   targetId: string;
-  targetType: TargetType;
-  category: ReportCategory;
+  targetType: string;
+  category: string;
   title: string;
   description: string;
 }
@@ -584,11 +565,11 @@ export interface GetReportResponseDto {
   reporterId: string;
   reporterName?: string;
   targetId: string;
-  targetType: TargetType;
-  category: ReportCategory;
+  targetType: string;
+  category: string;
   title: string;
   description: string;
-  status: ReportStatus;
+  status: string;
   note?: string;
   createdAt: string;
   updatedAt: string;
@@ -630,6 +611,8 @@ export interface OrderQueryParams {
   paymentId?: string;
   code?: string;
   status?: OrderStatus;
+  paymentStatus?: string;
+  paymentMethod?: string;
   userId?: string;
   startDate?: string;
   endDate?: string;
@@ -640,7 +623,7 @@ export interface OrderQueryParams {
 export interface VideoQueryParams {
   page?: number;
   limit?: number;
-  status?: VideoStatus;
+  status?: MediaFileStatus;
   title?: string;
 }
 

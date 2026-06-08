@@ -8,9 +8,13 @@ import { ProductDetail } from "./pages/ProductDetail";
 import { Orders } from "./pages/Orders";
 import { Notifications } from "./pages/Notifications";
 import { Chat } from "./pages/Chat";
-import { Videos } from "./pages/Videos";
-import { Reviews } from "./pages/Reviews";
-import { Reports } from "./pages/Reports";
+import { Media } from "./pages/Media";
+import { Categories } from "./pages/Categories";
+import { CategoryForm } from "./pages/CategoryForm";
+import { Brands } from "./pages/Brands";
+import { BrandForm } from "./pages/BrandForm";
+import { Users } from "./pages/Users";
+import { UserForm } from "./pages/UserForm";
 import { Login } from "./pages/Login";
 import { ForgotPassword } from "./pages/ForgotPassword";
 import { Toaster } from "./components/ui/sonner";
@@ -84,9 +88,16 @@ export default function App() {
                     <Route path="/orders" element={<Orders />} />
                     <Route path="/notifications" element={<Notifications />} />
                     <Route path="/chat" element={<Chat />} />
-                    <Route path="/videos" element={<Videos />} />
-                    <Route path="/reviews" element={<Reviews />} />
-                    <Route path="/reports" element={<Reports />} />
+                    <Route path="/media" element={<Media />} />
+                    <Route path="/categories" element={<Categories />} />
+                    <Route path="/categories/create" element={<CategoryForm />} />
+                    <Route path="/categories/:id/edit" element={<CategoryForm />} />
+                    <Route path="/brands" element={<Brands />} />
+                    <Route path="/brands/create" element={<BrandForm />} />
+                    <Route path="/brands/:id/edit" element={<BrandForm />} />
+                    <Route path="/users" element={<Users />} />
+                    <Route path="/users/create" element={<UserForm />} />
+                    <Route path="/users/:id/edit" element={<UserForm />} />
                   </Routes>
                 </Layout>
               </ProtectedRoute>

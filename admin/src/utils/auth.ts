@@ -17,9 +17,17 @@ export function setAuthenticated(email: string, remember = false): void {
   }
 }
 
-export function logout(): void {
-  localStorage.clear();
-  sessionStorage.clear();
+import { authApi } from "../services/api";
+
+export async function logout(): Promise<void> {
+  try {
+    await authApi.logout();
+  } catch (error) {
+    console.error("Logout API call failed:", error);
+  } finally {
+    localStorage.clear();
+    sessionStorage.clear();
+  }
 }
 
 export function getUserEmail(): string | null {

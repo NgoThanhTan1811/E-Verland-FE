@@ -6,9 +6,10 @@ export const en = {
     orders: "Orders",
     notifications: "Notifications",
     chat: "Chat",
-    videos: "Videos",
-    reviews: "Reviews",
-    reports: "Reports",
+    media: "Media",
+    brands: "Brands",
+    categories: "Categories",
+    users: "Users",
     logout: "Logout",
   },
   // Dashboard

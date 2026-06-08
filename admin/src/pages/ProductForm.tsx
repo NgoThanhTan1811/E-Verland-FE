@@ -51,7 +51,7 @@ export function ProductForm() {
     districtName: undefined,
     wardId: undefined,
     wardName: undefined,
-    status: "DRAFT",
+    status: "Draft",
     categories: [],
     skus: [],
     attributes: [],
@@ -59,10 +59,12 @@ export function ProductForm() {
 
   // Load provinces on mount
   useEffect(() => {
-    loadProvinces();
+    if (!isEdit) {
+      loadProvinces();
+    }
     loadCategories();
     loadBrands();
-  }, []);
+  }, [isEdit]);
 
   // Load districts when province changes
   useEffect(() => {
@@ -184,7 +186,7 @@ export function ProductForm() {
     try {
       setLoading(true);
       const response = await productApi.getById(id);
-      const product = response.data;
+      const product = response.data || response;
       setFormData({
         name: product.name || "",
         basePrice: product.basePrice ?? 0,
@@ -209,7 +211,7 @@ export function ProductForm() {
             stock: sku.stock,
             image: sku.image,
           })) || [],
-        attributes: product.attributes || [],
+        attributes: Array.isArray(product.attributes) ? product.attributes : [],
       });
     } catch (error) {
       console.error("Failed to load product:", error);
@@ -235,7 +237,7 @@ export function ProductForm() {
           provinceId: formData.provinceId || undefined,
           districtId: formData.districtId || undefined,
           wardId: formData.wardId || undefined,
-          status: formData.status === "ACTIVE" ? "Published" : formData.status
+          status: formData.status === "Published" ? "Published" : formData.status
         };
 
         await productApi.create(payload);
@@ -503,112 +505,114 @@ export function ProductForm() {
             </div>
 
             {/* Location/Address Selection */}
-            <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
-                Location
-              </h3>
+            {!isEdit && (
+              <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Location
+                </h3>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Province Select */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Province/City
-                  </label>
-                  <select
-                    value={formData.provinceId || ""}
-                    onChange={(e) => {
-                      const provinceId = e.target.value
-                        ? parseInt(e.target.value)
-                        : undefined;
-                      const selectedProvince = provinces.find(
-                        (p) => p.id === provinceId,
-                      );
-                      setFormData({
-                        ...formData,
-                        provinceId,
-                        provinceName: selectedProvince?.name,
-                        districtId: undefined,
-                        districtName: undefined,
-                        wardId: undefined,
-                        wardName: undefined,
-                      });
-                    }}
-                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Select Province</option>
-                    {provinces.map((province) => (
-                      <option key={province.id} value={province.id}>
-                        {province.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Province Select */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Province/City
+                    </label>
+                    <select
+                      value={formData.provinceId || ""}
+                      onChange={(e) => {
+                        const provinceId = e.target.value
+                          ? parseInt(e.target.value)
+                          : undefined;
+                        const selectedProvince = provinces.find(
+                          (p) => p.id === provinceId,
+                        );
+                        setFormData({
+                          ...formData,
+                          provinceId,
+                          provinceName: selectedProvince?.name,
+                          districtId: undefined,
+                          districtName: undefined,
+                          wardId: undefined,
+                          wardName: undefined,
+                        });
+                      }}
+                      className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Select Province</option>
+                      {provinces.map((province) => (
+                        <option key={province.id} value={province.id}>
+                          {province.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                {/* District Select */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    District
-                  </label>
-                  <select
-                    value={formData.districtId || ""}
-                    onChange={(e) => {
-                      const districtId = e.target.value
-                        ? parseInt(e.target.value)
-                        : undefined;
-                      const selectedDistrict = districts.find(
-                        (d) => d.id === districtId,
-                      );
-                      setFormData({
-                        ...formData,
-                        districtId,
-                        districtName: selectedDistrict?.name,
-                        wardId: undefined,
-                        wardName: undefined,
-                      });
-                    }}
-                    disabled={!formData.provinceId}
-                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <option value="">Select District</option>
-                    {districts.map((district) => (
-                      <option key={district.id} value={district.id}>
-                        {district.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                  {/* District Select */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      District
+                    </label>
+                    <select
+                      value={formData.districtId || ""}
+                      onChange={(e) => {
+                        const districtId = e.target.value
+                          ? parseInt(e.target.value)
+                          : undefined;
+                        const selectedDistrict = districts.find(
+                          (d) => d.id === districtId,
+                        );
+                        setFormData({
+                          ...formData,
+                          districtId,
+                          districtName: selectedDistrict?.name,
+                          wardId: undefined,
+                          wardName: undefined,
+                        });
+                      }}
+                      disabled={!formData.provinceId}
+                      className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <option value="">Select District</option>
+                      {districts.map((district) => (
+                        <option key={district.id} value={district.id}>
+                          {district.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                {/* Ward Select */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Ward/Commune
-                  </label>
-                  <select
-                    value={formData.wardId || ""}
-                    onChange={(e) => {
-                      const wardId = e.target.value
-                        ? parseInt(e.target.value)
-                        : undefined;
-                      const selectedWard = wards.find((w) => w.id === wardId);
-                      setFormData({
-                        ...formData,
-                        wardId,
-                        wardName: selectedWard?.name,
-                      });
-                    }}
-                    disabled={!formData.districtId}
-                    className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <option value="">Select Ward</option>
-                    {wards.map((ward) => (
-                      <option key={ward.id} value={ward.id}>
-                        {ward.name}
-                      </option>
-                    ))}
-                  </select>
+                  {/* Ward Select */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Ward/Commune
+                    </label>
+                    <select
+                      value={formData.wardId || ""}
+                      onChange={(e) => {
+                        const wardId = e.target.value
+                          ? parseInt(e.target.value)
+                          : undefined;
+                        const selectedWard = wards.find((w) => w.id === wardId);
+                        setFormData({
+                          ...formData,
+                          wardId,
+                          wardName: selectedWard?.name,
+                        });
+                      }}
+                      disabled={!formData.districtId}
+                      className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <option value="">Select Ward</option>
+                      {wards.map((ward) => (
+                        <option key={ward.id} value={ward.id}>
+                          {ward.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">

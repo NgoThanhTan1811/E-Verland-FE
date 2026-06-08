@@ -5,6 +5,13 @@ interface DateRangePickerProps {
   onDateRangeChange: (startDate: string | null, endDate: string | null) => void;
 }
 
+const getLocalDateString = (d: Date) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
 export function DateRangePicker({ onDateRangeChange }: DateRangePickerProps) {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -29,7 +36,7 @@ export function DateRangePicker({ onDateRangeChange }: DateRangePickerProps) {
     {
       label: 'Today',
       getValue: () => {
-        const today = new Date().toISOString().split('T')[0];
+        const today = getLocalDateString(new Date());
         return { start: today, end: today };
       }
     },
@@ -40,8 +47,8 @@ export function DateRangePicker({ onDateRangeChange }: DateRangePickerProps) {
         const start = new Date(end);
         start.setDate(start.getDate() - 6);
         return {
-          start: start.toISOString().split('T')[0],
-          end: end.toISOString().split('T')[0]
+          start: getLocalDateString(start),
+          end: getLocalDateString(end)
         };
       }
     },
@@ -52,8 +59,8 @@ export function DateRangePicker({ onDateRangeChange }: DateRangePickerProps) {
         const start = new Date(end);
         start.setDate(start.getDate() - 29);
         return {
-          start: start.toISOString().split('T')[0],
-          end: end.toISOString().split('T')[0]
+          start: getLocalDateString(start),
+          end: getLocalDateString(end)
         };
       }
     },
@@ -63,8 +70,8 @@ export function DateRangePicker({ onDateRangeChange }: DateRangePickerProps) {
         const now = new Date();
         const start = new Date(now.getFullYear(), now.getMonth(), 1);
         return {
-          start: start.toISOString().split('T')[0],
-          end: now.toISOString().split('T')[0]
+          start: getLocalDateString(start),
+          end: getLocalDateString(now)
         };
       }
     }

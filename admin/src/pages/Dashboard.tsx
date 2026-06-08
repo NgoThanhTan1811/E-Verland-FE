@@ -7,6 +7,10 @@ import {
   Clock,
   DollarSign,
   Star,
+  Wallet,
+  Briefcase,
+  PiggyBank,
+  Landmark
 } from "lucide-react";
 import {
   LineChart,
@@ -21,8 +25,8 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { dashboardApi, orderApi, reviewApi } from "../services/api";
-import type { DashboardData, OrderListItem, ReviewItem } from "../types";
+import { dashboardApi, orderApi, productApi } from "../services/api";
+import type { DashboardData, OrderListItem } from "../types";
 import {
   SkeletonCard,
   SkeletonChart,
@@ -34,7 +38,7 @@ export function Dashboard() {
   const { t } = useLanguage();
   const [stats, setStats] = useState<DashboardData | null>(null);
   const [recentOrders, setRecentOrders] = useState<OrderListItem[]>([]);
-  const [recentReviews, setRecentReviews] = useState<ReviewItem[]>([]);
+  // removed recentReviews state
   const [revenueTrends, setRevenueTrends] = useState<
     { date: string; revenue: number }[]
   >([]);
@@ -51,58 +55,98 @@ export function Dashboard() {
     try {
       setLoading(true);
 
-      // Load all dashboard data in parallel
-      const [dashboardData, ordersData, reviewsData] = await Promise.all([
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+      sevenDaysAgo.setHours(0, 0, 0, 0);
+
+      // Load all dashboard data
+      // Use Promise.allSettled to avoid one failed API crashing the entire dashboard
+      const [dashboardRes, ordersRes, recentOrdersRes, productsRes] = await Promise.allSettled([
         dashboardApi.getDashboard(),
+        orderApi.getAll({ 
+          page: 1, 
+          limit: 1000,
+          startDate: sevenDaysAgo.toISOString()
+        }),
         orderApi.getAll({ page: 1, limit: 5 }),
-        reviewApi.getAll({ page: 1, limit: 4 }),
+        productApi.getAll({ page: 1, limit: 1 }),
       ]);
 
-      // Handle data wrapper from API response: { data: { orders: ..., products: ... } }
-      setStats(dashboardData.data);
+      const dashboardData = dashboardRes.status === 'fulfilled' ? dashboardRes.value : {};
+      const ordersData = ordersRes.status === 'fulfilled' ? ordersRes.value : { items: [] };
+      const recentOrdersData = recentOrdersRes.status === 'fulfilled' ? recentOrdersRes.value : { items: [] };
+      const productsData = productsRes.status === 'fulfilled' ? productsRes.value : {};
 
-      // Generate revenue trends for the last 7 days based on total revenue
-      const trends = [];
+      // Handle AdminDashboardDto directly
+      const adminDash = dashboardData.data || dashboardData || {};
+      const productsMeta = productsData.data || productsData || {};
+      
+      setStats({
+        products: { totalProducts: productsMeta.totalItems || adminDash.totalProducts || adminDash.TotalProducts || 0 },
+        orders: {
+          totalOrders: Object.values(adminDash.totalOrdersByStatus || {}).reduce((a: any, b: any) => a + b, 0) as number,
+          pendingOrders: adminDash.totalOrdersByStatus?.["Pending"] || adminDash.totalOrdersByStatus?.["PENDING"] || 0,
+          totalRevenue: adminDash.totalRevenue || 0,
+        },
+        ledger: {
+          platformCash: adminDash.platformCash || 0,
+          customerLiability: adminDash.customerLiability || 0,
+          sellerPending: adminDash.sellerPending || 0,
+          sellerAvailable: adminDash.sellerAvailable || 0,
+        }
+      } as any);
+
+      // Generate revenue trends for the last 7 days based on real order data
+      const trendsMap = new Map<string, number>();
       const today = new Date();
-      const totalRevenue = dashboardData.data?.orders?.totalRevenue || 0;
-      const baseRevenue = totalRevenue / 7;
-
+      
       for (let i = 6; i >= 0; i--) {
         const date = new Date(today);
         date.setDate(date.getDate() - i);
-        // Add some variation to make it look realistic
-        const variation = (Math.random() - 0.5) * 0.3 * baseRevenue;
-        trends.push({
-          date: date.toISOString(),
-          revenue: Math.floor(baseRevenue + variation),
-        });
+        trendsMap.set(date.toISOString().split('T')[0], 0);
       }
+
+      const allOrdersLast7Days = ordersData.items || ordersData.data?.items || ordersData.data?.orders || [];
+      
+      allOrdersLast7Days.forEach((order: any) => {
+        if (order.status !== 'Canceled') {
+          const dateStr = new Date(order.createdAt).toISOString().split('T')[0];
+          if (trendsMap.has(dateStr)) {
+            trendsMap.set(dateStr, (trendsMap.get(dateStr) || 0) + order.grandTotal);
+          }
+        }
+      });
+
+      const trends = Array.from(trendsMap.entries()).map(([date, revenue]) => ({
+        date: new Date(date).toISOString(),
+        revenue
+      }));
+
       setRevenueTrends(trends);
 
       // Generate order status distribution from real data
-      const orderData = dashboardData.data?.orders || {};
-      const pendingOrders = orderData.pendingOrders || 0;
-      const confirmedOrders = orderData.confirmedOrders || 0;
-      const completedOrders = orderData.completedOrders || 0;
+      const orderStatsMap = adminDash.totalOrdersByStatus || {};
+      const PendingCount = orderStatsMap["Pending"] || orderStatsMap["Pending"] || 0;
+      const ConfirmedCount = orderStatsMap["Confirmed"] || orderStatsMap["Confirmed"] || 0;
+      const CompletedCount = orderStatsMap["Completed"] || orderStatsMap["Completed"] || 0;
 
-      const stats = [
-        { status: "PENDING", count: pendingOrders, color: "#eab308" },
-        { status: "CONFIRMED", count: confirmedOrders, color: "#3b82f6" },
-        { status: "COMPLETED", count: completedOrders, color: "#22c55e" },
+      const statsArr = [
+        { status: "Pending", count: PendingCount, color: "#eab308" },
+        { status: "Confirmed", count: ConfirmedCount, color: "#3b82f6" },
+        { status: "Completed", count: CompletedCount, color: "#22c55e" },
       ].filter((item) => item.count > 0);
 
-      setOrderStats(stats);
+      setOrderStats(statsArr);
 
       // Set recent orders from API
-      setRecentOrders(ordersData.data.orders || []);
+      const recentOrdersList = recentOrdersData.items || recentOrdersData.data?.items || recentOrdersData.data?.orders || [];
+      setRecentOrders(recentOrdersList);
 
-      // Set recent reviews from API
-      setRecentReviews(reviewsData.data.reviews || []);
+      // Removed reviews setting
     } catch (error) {
       console.error("Failed to load dashboard data:", error);
       // Set empty data on error
       setRecentOrders([]);
-      setRecentReviews([]);
       setRevenueTrends([]);
       setOrderStats([]);
     } finally {
@@ -154,15 +198,42 @@ export function Dashboard() {
     },
     {
       title: "Pending Orders",
-      value: stats?.orders?.pendingOrders || 0,
+      value: stats?.orders?.PendingOrders || 0,
       icon: Clock,
       color: "yellow",
-      link: "/orders?status=PENDING",
+      link: "/orders?status=Pending",
     },
     {
       title: "Revenue",
-      value: `$${stats?.orders?.totalRevenue?.toLocaleString() || 0}`,
+      value: `${stats?.orders?.totalRevenue?.toLocaleString() || 0} đ`,
       icon: DollarSign,
+      color: "purple",
+    },
+  ];
+
+  const financialCards = [
+    {
+      title: "Platform Cash",
+      value: `${stats?.ledger?.platformCash?.toLocaleString() || 0} đ`,
+      icon: Landmark,
+      color: "blue",
+    },
+    {
+      title: "Seller Pending",
+      value: `${stats?.ledger?.sellerPending?.toLocaleString() || 0} đ`,
+      icon: Clock,
+      color: "yellow",
+    },
+    {
+      title: "Seller Available",
+      value: `${stats?.ledger?.sellerAvailable?.toLocaleString() || 0} đ`,
+      icon: Wallet,
+      color: "green",
+    },
+    {
+      title: "Customer Liability",
+      value: `${stats?.ledger?.customerLiability?.toLocaleString() || 0} đ`,
+      icon: Briefcase,
       color: "purple",
     },
   ];
@@ -182,15 +253,15 @@ export function Dashboard() {
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
-      PENDING:
+      Pending:
         "bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-400",
-      CONFIRMED:
+      Confirmed:
         "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400",
       SHIPPING:
         "bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400",
-      COMPLETED:
+      Completed:
         "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-400",
-      CANCELLED: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400",
+      Canceled: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400",
     };
     return (
       colors[status] ||
@@ -246,6 +317,36 @@ export function Dashboard() {
         })}
       </div>
 
+      {/* Financial Cards (Ledger) */}
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mt-8 mb-4">
+        Platform Finances (Ledger)
+      </h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6">
+        {financialCards.map((fin) => {
+          const Icon = fin.icon;
+          return (
+            <div
+              key={fin.title}
+              className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-6 hover:shadow-lg transition-shadow"
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {fin.title}
+                  </p>
+                  <p className="text-2xl font-semibold text-gray-900 dark:text-white mt-2">
+                    {fin.value}
+                  </p>
+                </div>
+                <div className={`p-3 rounded-lg ${getColorClasses(fin.color)}`}>
+                  <Icon className="w-6 h-6" />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
       {/* Charts */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* Revenue Trends Chart */}
@@ -273,7 +374,7 @@ export function Dashboard() {
                 <YAxis
                   stroke="#9ca3af"
                   tick={{ fill: "#9ca3af" }}
-                  tickFormatter={(value) => `$${(value / 1000).toFixed(1)}k`}
+                  tickFormatter={(value) => `${(value / 1000).toFixed(1)}k đ`}
                 />
                 <Tooltip
                   contentStyle={{
@@ -283,7 +384,7 @@ export function Dashboard() {
                     color: "#fff",
                   }}
                   formatter={(value: number) => [
-                    `$${value.toLocaleString()}`,
+                    `${value.toLocaleString()} đ`,
                     "Revenue",
                   ]}
                   labelFormatter={(label) =>
@@ -326,6 +427,7 @@ export function Dashboard() {
                   outerRadius={100}
                   fill="#8884d8"
                   dataKey="count"
+                  nameKey="status"
                 >
                   {orderStats.map((entry) => (
                     <Cell key={`cell-${entry.status}`} fill={entry.color} />
@@ -407,7 +509,7 @@ export function Dashboard() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
-                        ${order.grandTotal.toLocaleString()}
+                        {order.grandTotal.toLocaleString()} đ
                       </td>
                       <td className="px-6 py-4">
                         <span
@@ -432,66 +534,7 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* Recent Reviews */}
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
-          <div className="p-6 border-b border-gray-200 dark:border-gray-800">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-                Recent Reviews
-              </h2>
-              <Link
-                to="/reviews"
-                className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400"
-              >
-                View all
-              </Link>
-            </div>
-          </div>
-          <div className="p-6 space-y-4">
-            {recentReviews.length > 0 ? (
-              recentReviews.map((review) => (
-                <div
-                  key={review.id}
-                  className="pb-4 border-b border-gray-200 dark:border-gray-800 last:border-0 last:pb-0"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                          {review.username}
-                        </p>
-                        <div className="flex items-center gap-0.5">
-                          {Array.from({ length: 5 }).map((_, i) => (
-                            <Star
-                              key={i}
-                              className={`w-3.5 h-3.5 ${
-                                i < review.rating
-                                  ? "text-yellow-400 fill-yellow-400"
-                                  : "text-gray-300 dark:text-gray-600"
-                              }`}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2">
-                        {review.content}
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                        Product: {review.productId}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="py-8 text-center">
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  No recent reviews
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
+        {/* Recent Reviews Removed */}
       </div>
     </div>
   );
