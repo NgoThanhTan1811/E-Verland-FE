@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { BadgeDollarSign, Plus, Pencil, Trash2, Search } from "lucide-react";
 import { brandApi } from "../services/api";
-import type { BrandItem } from "../types";
+import { PaginationControls } from "../components/PaginationControls";
+import type { BrandItem, BrandQueryParams } from "../types";
 import { toast } from "sonner";
 
 type BrandForm = {
@@ -13,22 +14,17 @@ export function Brands() {
   const [brands, setBrands] = useState<BrandItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [search, setSearch] = useState("");
   const [form, setForm] = useState<BrandForm>({ name: "" });
-
-  const filteredBrands = useMemo(() => {
-    const keyword = search.trim().toLowerCase();
-    if (!keyword) return brands;
-    return brands.filter(
-      (brand) =>
-        brand.name.toLowerCase().includes(keyword) ||
-        brand.id.toLowerCase().includes(keyword),
-    );
-  }, [brands, search]);
+  const [filters, setFilters] = useState<BrandQueryParams>({
+    Page: 1,
+    Limit: 10,
+    Keyword: "",
+  });
+  const [total, setTotal] = useState(0);
 
   useEffect(() => {
     loadBrands();
-  }, []);
+  }, [filters.Page, filters.Limit, filters.Keyword]);
 
   const unwrapBrands = (response: any): BrandItem[] => {
     const payload = response?.data ?? response;
@@ -38,8 +34,11 @@ export function Brands() {
   const loadBrands = async () => {
     try {
       setLoading(true);
-      const response = await brandApi.search({ Page: 1, Limit: 100 });
+      const response = await brandApi.search(filters);
       setBrands(unwrapBrands(response));
+      // Try to extract totalItems from response. If not available, use length.
+      const payload = response?.data ?? response;
+      setTotal(payload?.totalItems || payload?.total || unwrapBrands(response).length);
     } catch (error) {
       console.error(error);
       toast.error("Failed to load brands");
@@ -153,8 +152,8 @@ export function Brands() {
             <div className="relative w-full lg:w-80">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                value={filters.Keyword || ""}
+                onChange={(e) => setFilters({ ...filters, Keyword: e.target.value, Page: 1 })}
                 className="w-full rounded-xl border border-gray-200 bg-gray-50 py-2.5 pl-10 pr-4 dark:border-gray-700 dark:bg-gray-800"
                 placeholder="Search brands"
               />
@@ -165,7 +164,7 @@ export function Brands() {
             <div className="py-16 text-center text-gray-500 dark:text-gray-400">
               Loading brands...
             </div>
-          ) : filteredBrands.length === 0 ? (
+          ) : brands.length === 0 ? (
             <div className="py-16 text-center text-gray-500 dark:text-gray-400">
               No brands found
             </div>
@@ -183,7 +182,7 @@ export function Brands() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-                  {filteredBrands.map((brand) => (
+                  {brands.map((brand) => (
                     <tr
                       key={brand.id}
                       className="hover:bg-gray-50 dark:hover:bg-gray-800/50"
@@ -217,6 +216,17 @@ export function Brands() {
                 </tbody>
               </table>
             </div>
+          )}
+
+          {!loading && total > 0 && (
+            <PaginationControls
+              page={filters.Page || 1}
+              limit={filters.Limit || 10}
+              total={total}
+              onPageChange={(page) => setFilters({ ...filters, Page: page })}
+              onLimitChange={(limit) => setFilters({ ...filters, Limit: limit, Page: 1 })}
+              itemName="brands"
+            />
           )}
         </div>
       </div>

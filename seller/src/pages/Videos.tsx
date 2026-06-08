@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Search, Filter, Play, Clock, X, Upload, Trash2 } from "lucide-react";
 import { videoApi } from "../services/api";
+import { PaginationControls } from "../components/PaginationControls";
 import type { VideoItem, VideoStatus, VideoQueryParams } from "../types";
 import { VideoUploadModal } from "../components/VideoUploadModal";
 import { toast } from "sonner";
@@ -301,33 +302,14 @@ export function Videos() {
 
       {/* Pagination */}
       {!loading && total > 0 && (
-        <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 px-6 py-4 flex items-center justify-between">
-          <div className="text-sm text-gray-600 dark:text-gray-400">
-            Showing {((filters.page || 1) - 1) * (filters.limit || 12) + 1} to{" "}
-            {Math.min((filters.page || 1) * (filters.limit || 12), total)} of{" "}
-            {total} videos
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() =>
-                setFilters({ ...filters, page: (filters.page || 1) - 1 })
-              }
-              disabled={filters.page === 1}
-              className="px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Previous
-            </button>
-            <button
-              onClick={() =>
-                setFilters({ ...filters, page: (filters.page || 1) + 1 })
-              }
-              disabled={(filters.page || 1) * (filters.limit || 12) >= total}
-              className="px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        <PaginationControls
+          page={filters.page || 1}
+          limit={filters.limit || 12}
+          total={total}
+          onPageChange={(page) => setFilters({ ...filters, page })}
+          onLimitChange={(limit) => setFilters({ ...filters, limit, page: 1 })}
+          itemName="videos"
+        />
       )}
 
       {/* Upload Modal */}

@@ -34,7 +34,19 @@ export function ProductForm() {
   });
 
   const [categories, setCategories] = useState<CategoryItem[]>([]);
-  const [skus, setSkus] = useState<any[]>([]);
+  const [skus, setSkus] = useState<
+    {
+      id: string;
+      value?: string;
+      price: number;
+      stock: number;
+      url?: string;
+      skuCode?: string;
+      isActive?: boolean;
+      optionValues?: Record<string, string>;
+    }[]
+  >([]);
+  const [originalSkus, setOriginalSkus] = useState<any[]>([]);
   const [originalVariants, setOriginalVariants] = useState<ProductVariant[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [pendingCategoryId, setPendingCategoryId] = useState("");
@@ -158,7 +170,7 @@ export function ProductForm() {
         provinceId: product.provinceId,
         districtId: product.districtId,
         wardId: product.wardId,
-        status: product.status || "Draft",
+        status: product.status || "DRAFT",
         categories: product.categoryIds
           ? product.categoryIds
           : Array.isArray(product.categories)
@@ -181,7 +193,9 @@ export function ProductForm() {
             : [],
         stock: product.totalStock ?? product.stock ?? 1,
       });
-      setSkus(product.skus || []);
+      const loadedSkus = product.skus || [];
+      setSkus(loadedSkus);
+      setOriginalSkus(JSON.parse(JSON.stringify(loadedSkus))); // Deep copy
       setOriginalVariants(product.variants || []);
     } catch (error) {
       console.error("Failed to load product:", error);
@@ -198,47 +212,73 @@ export function ProductForm() {
     try {
       setLoading(true);
 
+      const cleanedFormData = {
+        ...formData,
+        images: formData.images.filter(img => img && img.trim() !== ""),
+      };
+
       if (isEdit && id) {
-        await productApi.update({ ...formData, id });
+        await productApi.update({ ...cleanedFormData, id });
 
         // Check if variants have structurally changed
         const variantsChanged = JSON.stringify(originalVariants) !== JSON.stringify(formData.variants);
 
         if (variantsChanged && formData.variants.length > 0) {
           // Map variants to the structure expected by the C# backend
-          const mappedVariants = formData.variants.map((v) => ({
+          const mappedVariants = cleanedFormData.variants.map((v) => ({
             key: v.value,
             values: v.options || [],
           }));
           await skuApi.addSkusToProduct(id, {
             variants: mappedVariants,
-            stock: formData.stock ?? 1,
+            stock: cleanedFormData.stock ?? 1,
           });
           toast.success("Product updated and SKUs regenerated successfully");
         } else if (skus.length > 0) {
           // Save existing SKUs if they haven't structurally changed
-          await Promise.all(
-            skus.map((sku) =>
-              skuApi.update(sku.id, {
-                skuCode: sku.skuCode || null,
-                price: sku.price ?? 0,
-                stock: sku.stock ?? 0,
-                url: sku.url || null,
-                isActive: sku.isActive ?? true,
-                optionValues: sku.optionValues || null,
-              })
-            )
-          );
-          toast.success("Product and SKUs updated successfully");
+            // Only update SKUs that have actually changed
+            const skusToUpdate = skus.filter((sku, index) => {
+              const original = originalSkus[index];
+              if (!original) return true; // New SKU?
+              return (
+                sku.skuCode !== original.skuCode ||
+                sku.price !== original.price ||
+                sku.stock !== original.stock ||
+                sku.isActive !== original.isActive ||
+                sku.url !== original.url
+              );
+            });
+
+            if (skusToUpdate.length > 0) {
+              await Promise.all(
+                skusToUpdate.map((sku) => {
+                  const skuPayload: any = {
+                    skuCode: sku.skuCode || null,
+                    price: sku.price ?? 0,
+                    stock: sku.stock ?? 0,
+                    isActive: sku.isActive ?? true,
+                    optionValues: sku.optionValues || null,
+                    url: sku.url ? sku.url.trim() : "",
+                  };
+                  return skuApi.updateSku(sku.id, skuPayload);
+                })
+              );
+              toast.success("Product and SKUs updated successfully");
+            } else {
+              toast.success("Product updated successfully");
+            }
+          } else {
+            toast.success("Product updated successfully");
+          }
+
+          // Reload data instead of navigating back
+          await loadProduct(id);
         } else {
-          toast.success("Product updated successfully");
-        }
-      } else {
-        await productApi.create(formData);
+        await productApi.create(cleanedFormData);
         toast.success("Product created successfully");
+        navigate("/products");
       }
 
-      navigate("/products");
     } catch (error) {
       console.error("Failed to save product:", error);
       toast.error("Failed to save product");
@@ -390,7 +430,7 @@ export function ProductForm() {
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Base Price *
@@ -432,26 +472,6 @@ export function ProductForm() {
                   placeholder="0.00"
                 />
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Total Stock *
-                </label>
-                <input
-                  type="number"
-                  required
-                  min="0"
-                  value={formData.stock ?? 1}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      stock: parseInt(e.target.value, 10) || 0,
-                    })
-                  }
-                  className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="0"
-                />
-              </div>
             </div>
 
 
@@ -484,10 +504,10 @@ export function ProductForm() {
                 }
                 className="w-full px-4 py-2.5 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="Draft">Draft</option>
-                <option value="Published">Active (Published)</option>
-                <option value="Inactive">Inactive</option>
-                <option value="OutOfStock">Out of Stock</option>
+                <option value="DRAFT">Draft</option>
+                <option value="ACTIVE">Active (Published)</option>
+                <option value="INACTIVE">Inactive</option>
+                <option value="OUT_OF_STOCK">Out of Stock</option>
               </select>
             </div>
           </div>

@@ -9,6 +9,7 @@ import type {
   OrderQueryParams,
 } from "../types";
 import { DateRangePicker } from "../components/DateRangePicker";
+import { PaginationControls } from "../components/PaginationControls";
 
 export function Orders() {
   const [orders, setOrders] = useState<OrderListItem[]>([]);
@@ -101,38 +102,7 @@ export function Orders() {
     return colors[status] || "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400";
   };
 
-  const buildPagination = () => {
-    if (totalPages <= 1) return [] as Array<number | "ellipsis">;
 
-    const currentPage = filters.page || 1;
-    const items: Array<number | "ellipsis"> = [];
-
-    for (let pageNumber = 1; pageNumber <= totalPages; pageNumber += 1) {
-      if (
-        totalPages <= 7 ||
-        pageNumber === 1 ||
-        pageNumber === totalPages ||
-        Math.abs(pageNumber - currentPage) <= 1
-      ) {
-        items.push(pageNumber);
-      }
-    }
-
-    return items.reduce<Array<number | "ellipsis">>((result, pageNumber) => {
-      const previous = result[result.length - 1];
-      if (
-        typeof previous === "number" &&
-        typeof pageNumber === "number" &&
-        pageNumber - previous > 1
-      ) {
-        result.push("ellipsis");
-      }
-      result.push(pageNumber);
-      return result;
-    }, []);
-  };
-
-  const paginationItems = buildPagination();
 
   return (
     <div className="space-y-6">
@@ -333,79 +303,14 @@ export function Orders() {
         )}
 
         {!loading && total > 0 && (
-          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-800 flex items-center justify-between gap-4 flex-wrap">
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              Showing {((filters.page || 1) - 1) * (filters.limit || 10) + 1} to{" "}
-              {Math.min((filters.page || 1) * (filters.limit || 10), total)} of{" "}
-              {total} orders
-            </div>
-            <div className="flex items-center gap-2 flex-wrap justify-end">
-              <button
-                onClick={() =>
-                  setFilters({
-                    ...filters,
-                    page: Math.max(1, (filters.page || 1) - 1),
-                  })
-                }
-                disabled={filters.page === 1}
-                className="px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                Previous
-              </button>
-
-              {paginationItems.map((item, index) =>
-                item === "ellipsis" ? (
-                  <span
-                    key={`ellipsis-${index}`}
-                    className="px-2 text-gray-400"
-                  >
-                    ...
-                  </span>
-                ) : (
-                  <button
-                    key={item}
-                    onClick={() => setFilters({ ...filters, page: item })}
-                    className={`px-4 py-2 rounded-lg border transition-colors ${
-                      item === (filters.page || 1)
-                        ? "border-blue-600 bg-blue-600 text-white"
-                        : "border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
-                    }`}
-                  >
-                    {item}
-                  </button>
-                ),
-              )}
-
-              <button
-                onClick={() =>
-                  setFilters({
-                    ...filters,
-                    page: Math.min(totalPages || 1, (filters.page || 1) + 1),
-                  })
-                }
-                disabled={totalPages === 0 || (filters.page || 1) >= totalPages}
-                className="px-4 py-2 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                Next
-              </button>
-
-              <select
-                value={filters.limit || 10}
-                onChange={(e) =>
-                  setFilters({
-                    ...filters,
-                    limit: Number(e.target.value),
-                    page: 1,
-                  })
-                }
-                className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800"
-              >
-                <option value={10}>10 / page</option>
-                <option value={20}>20 / page</option>
-                <option value={50}>50 / page</option>
-              </select>
-            </div>
-          </div>
+          <PaginationControls
+            page={filters.page || 1}
+            limit={filters.limit || 10}
+            total={total}
+            onPageChange={(page) => setFilters({ ...filters, page })}
+            onLimitChange={(limit) => setFilters({ ...filters, limit, page: 1 })}
+            itemName="orders"
+          />
         )}
       </div>
 

@@ -26,7 +26,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { dashboardApi, orderApi } from "../services/api";
+import { dashboardApi, orderApi, productApi } from "../services/api";
 import type {
   OrderListItem,
   SellerDashboardDto,
@@ -58,9 +58,12 @@ const STATUS_ALIASES: Record<string, string> = {
   refunded: "REFUNDED",
 };
 
+import { ORDER_STATUS_MAP } from "../services/api";
+
 function normalizeStatusKey(status: string): string {
-  const normalized = status.trim().toLowerCase();
-  return STATUS_ALIASES[normalized] || status.toUpperCase();
+  const normalizedStr = status.trim().toLowerCase();
+  // Map integer keys (like "0") or string aliases
+  return ORDER_STATUS_MAP[status] || ORDER_STATUS_MAP[normalizedStr] || STATUS_ALIASES[normalizedStr] || status.toUpperCase();
 }
 
 function getOrderCount(
@@ -82,6 +85,7 @@ function getOrderCount(
 
 export function Dashboard() {
   const [stats, setStats] = useState<SellerDashboardDto | null>(null);
+  const [totalProducts, setTotalProducts] = useState(0);
   const [recentOrders, setRecentOrders] = useState<OrderListItem[]>([]);
   const [revenueTrends, setRevenueTrends] = useState<
     { date: string; revenue: number }[]
@@ -99,13 +103,15 @@ export function Dashboard() {
     try {
       setLoading(true);
 
-      const [dashboardData, ordersData] = await Promise.all([
+      const [dashboardData, ordersData, productsData] = await Promise.all([
         dashboardApi.getDashboard(),
         orderApi.getAll({ page: 1, limit: 5 }),
+        productApi.getAll({ page: 1, limit: 1 }),
       ]);
 
       const summary = dashboardData?.data || dashboardData;
       setStats(summary);
+      setTotalProducts(productsData?.totalItems || productsData?.data?.totalItems || 0);
 
       const totalRevenue = summary?.totalRevenue || 0;
       const baseRevenue = totalRevenue / 7;
@@ -197,6 +203,13 @@ export function Dashboard() {
       color: "green",
       link: "/orders?status=COMPLETED",
     },
+    {
+      title: "Total Products",
+      value: totalProducts,
+      icon: Package,
+      color: "blue",
+      link: "/products",
+    },
   ];
 
   const getColorClasses = (color: string) => {
@@ -271,8 +284,8 @@ export function Dashboard() {
 
       {loading ? (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6">
-            {Array.from({ length: 4 }).map((_, i) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 lg:gap-6">
+            {Array.from({ length: 5 }).map((_, i) => (
               <SkeletonCard key={i} />
             ))}
           </div>
@@ -289,7 +302,7 @@ export function Dashboard() {
 
       {!loading ? (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 lg:gap-6">
             {kpiCards.map((kpi) => {
               const Icon = kpi.icon;
 
