@@ -15,7 +15,7 @@ import { useAuth } from "../../../shared/contexts/auth-context";
 import { accountService } from "../../../shared/services/account.service";
 import { profileService } from "../../../shared/services/profile.service";
 import { toast } from "sonner";
-import banksData from "../../../../../public/bank/banks.json";
+import banksData from "../../../public/bank/banks.json";
 
 const vietnameseBanks = (banksData.data || [])
   .filter((bank) => bank.supported !== false)

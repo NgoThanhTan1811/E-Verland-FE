@@ -1,6 +1,6 @@
-import provincesJson from "../../../../public/locations/provinces.json";
-import districtsJson from "../../../../public/locations/districts.json";
-import wardsJson from "../../../../public/locations/wards.json";
+import provincesJson from "../../public/locations/provinces.json";
+import districtsJson from "../../public/locations/districts.json";
+import wardsJson from "../../public/locations/wards.json";
 
 export interface Province {
   id: number;
