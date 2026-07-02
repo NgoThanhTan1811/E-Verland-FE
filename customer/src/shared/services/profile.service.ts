@@ -10,8 +10,8 @@ export interface ProfileResponse {
   gender?: number;
   avatarUrl?: string;
   dateOfBirth?: string;
-  createdAt: string;
-  updatedAt?: string;
+  createdAt?: string;
+  updatedAt?: string | null;
 }
 
 export interface UpdateProfileRequest {
@@ -23,6 +23,8 @@ export interface UpdateProfileRequest {
   gender?: number;
   bio?: string;
 }
+
+export interface CreateProfileRequest extends UpdateProfileRequest {}
 
 export interface AddressResponse {
   id: string;
@@ -48,6 +50,7 @@ export interface AddressRequest {
   provinceId?: number;
   districtId?: number;
   wardId?: number;
+  wardCode?: string; // GHN wardCode = String(wardId)
   street?: string;
   detail?: string;
   isDefault?: boolean;
@@ -72,9 +75,10 @@ export interface BankAccountRequest {
 }
 
 export const profileService = {
-  createProfile: (accountId: string) =>
-    apiRequest<ProfileResponse>(`/Profile?accountId=${accountId}`, {
+  createProfile: (accountId: string, data: CreateProfileRequest) =>
+    apiRequest<ProfileResponse>(`/profile?accountId=${accountId}`, {
       method: "POST",
+      body: JSON.stringify(data),
     }),
 
   getProfile: () =>

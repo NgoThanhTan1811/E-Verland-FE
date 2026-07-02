@@ -29,6 +29,7 @@ export function AddressListPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [profileId, setProfileId] = useState("");
+  const [meProfile, setMeProfile] = useState<any | null>(null);
 
   useEffect(() => {
     if (!isAuthenticated || !user) {
@@ -41,6 +42,7 @@ export function AddressListPage() {
       setIsLoading(true);
       try {
         const me = await accountService.me();
+        setMeProfile(me.profile || null);
         const nextProfileId = me.profile?.id || user.profile?.id || "";
         if (!isMounted) return;
         setProfileId(nextProfileId);
@@ -119,12 +121,20 @@ export function AddressListPage() {
             </Link>
             <h1 className="text-3xl font-bold">Địa chỉ của tôi</h1>
           </div>
-          <Link to="/profile/addresses/new">
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Thêm địa chỉ
-            </Button>
-          </Link>
+          <Button
+            onClick={() => {
+              // require basic profile info before allowing add
+              if (!meProfile || !meProfile.firstName || !meProfile.lastName) {
+                toast.info("Vui lòng cập nhật hồ sơ trước khi thêm địa chỉ");
+                navigate("/profile/edit");
+                return;
+              }
+              navigate("/profile/addresses/new");
+            }}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Thêm địa chỉ
+          </Button>
         </div>
 
         {/* Address List */}

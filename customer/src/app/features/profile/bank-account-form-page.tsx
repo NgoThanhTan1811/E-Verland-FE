@@ -15,19 +15,16 @@ import { useAuth } from "../../../shared/contexts/auth-context";
 import { accountService } from "../../../shared/services/account.service";
 import { profileService } from "../../../shared/services/profile.service";
 import { toast } from "sonner";
+import banksData from "../../../public/bank/banks.json";
 
-const vietnameseBanks = [
-  { code: "VCB", name: "Vietcombank" },
-  { code: "TCB", name: "Techcombank" },
-  { code: "ACB", name: "ACB" },
-  { code: "VIB", name: "VIB" },
-  { code: "MB", name: "MB Bank" },
-  { code: "VPB", name: "VPBank" },
-  { code: "BIDV", name: "BIDV" },
-  { code: "AGR", name: "Agribank" },
-  { code: "TPB", name: "TPBank" },
-  { code: "SAC", name: "Sacombank" },
-];
+const vietnameseBanks = (banksData.data || [])
+  .filter((bank) => bank.supported !== false)
+  .map((bank) => ({
+    code: String(bank.code || "").trim(),
+    name: String(bank.short_name || bank.name || "").trim(),
+  }))
+  .filter((bank) => bank.code && bank.name)
+  .sort((a, b) => a.name.localeCompare(b.name));
 
 export function BankAccountFormPage() {
   const { accountId } = useParams();
@@ -119,6 +116,17 @@ export function BankAccountFormPage() {
     }
   };
 
+  const handleBankNameSelect = (bankName: string) => {
+    const bank = vietnameseBanks.find((b) => b.name === bankName);
+    if (bank) {
+      setFormData((prev) => ({
+        ...prev,
+        bankCode: bank.code,
+        bankName: bank.name,
+      }));
+    }
+  };
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
@@ -200,27 +208,58 @@ export function BankAccountFormPage() {
           className="bg-card rounded-xl shadow-sm p-6 space-y-6"
         >
           {/* Bank Selection */}
-          <div className="space-y-2">
-            <Label htmlFor="bank">
-              Ngân hàng <span className="text-red-500">*</span>
-            </Label>
-            <Select value={formData.bankCode} onValueChange={handleBankSelect}>
-              <SelectTrigger
-                className={errors.bankCode ? "border-red-500" : ""}
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="bankName">
+                Tên ngân hàng <span className="text-red-500">*</span>
+              </Label>
+              <Select
+                value={formData.bankName}
+                onValueChange={handleBankNameSelect}
               >
-                <SelectValue placeholder="Chọn ngân hàng" />
-              </SelectTrigger>
-              <SelectContent>
-                {vietnameseBanks.map((bank) => (
-                  <SelectItem key={bank.code} value={bank.code}>
-                    {bank.name} ({bank.code})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {errors.bankCode && (
-              <p className="text-sm text-red-500">{errors.bankCode}</p>
-            )}
+                <SelectTrigger
+                  className={errors.bankCode ? "border-red-500" : ""}
+                >
+                  <SelectValue placeholder="Chọn tên ngân hàng" />
+                </SelectTrigger>
+                <SelectContent>
+                  {vietnameseBanks.map((bank) => (
+                    <SelectItem key={bank.name} value={bank.name}>
+                      {bank.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.bankCode && (
+                <p className="text-sm text-red-500">{errors.bankCode}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="bankCode">
+                Mã ngân hàng <span className="text-red-500">*</span>
+              </Label>
+              <Select
+                value={formData.bankCode}
+                onValueChange={handleBankSelect}
+              >
+                <SelectTrigger
+                  className={errors.bankCode ? "border-red-500" : ""}
+                >
+                  <SelectValue placeholder="Chọn mã ngân hàng" />
+                </SelectTrigger>
+                <SelectContent>
+                  {vietnameseBanks.map((bank) => (
+                    <SelectItem key={bank.code} value={bank.code}>
+                      {bank.code}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.bankCode && (
+                <p className="text-sm text-red-500">{errors.bankCode}</p>
+              )}
+            </div>
           </div>
 
           {/* Account Number */}

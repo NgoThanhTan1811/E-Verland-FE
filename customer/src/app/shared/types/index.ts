@@ -14,6 +14,8 @@ export interface Product {
   reviewCount: number;
   soldCount: number;
   stock: number;
+  imageUrl?: string;
+  imageUrls?: string[];
   images: string[];
   variants: ProductVariant[];
   attributes: ProductAttribute[];
@@ -86,16 +88,16 @@ export interface OrderItem {
   selectedVariants: { [key: string]: string };
 }
 
-export type OrderStatus = 
-  | 'pending' 
-  | 'confirmed' 
-  | 'shipping' 
-  | 'completed' 
-  | 'canceled';
+export type OrderStatus =
+  | "pending"
+  | "confirmed"
+  | "shipping"
+  | "completed"
+  | "canceled";
 
-export type PaymentMethod = 'cod' | 'online_banking' | 'e_wallet';
+export type PaymentMethod = "cod" | "online_banking" | "e_wallet";
 
-export type PaymentStatus = 'pending' | 'paid' | 'failed';
+export type PaymentStatus = "pending" | "paid" | "failed";
 
 export interface OrderTimeline {
   status: OrderStatus;
@@ -116,7 +118,7 @@ export interface Notification {
   id: string;
   title: string;
   message: string;
-  type: 'order' | 'promotion' | 'system';
+  type: "order" | "promotion" | "system";
   isRead: boolean;
   createdAt: string;
   link?: string;
@@ -126,7 +128,7 @@ export interface ChatMessage {
   id: string;
   conversationId: string;
   senderId: string;
-  senderType: 'customer' | 'admin' | 'system';
+  senderType: "customer" | "admin" | "system";
   message: string;
   timestamp: string;
   isRead: boolean;

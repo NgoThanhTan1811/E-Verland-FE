@@ -16,11 +16,21 @@ interface ProductCardProps {
 export function ProductCard({ product, onToggleFavorite }: ProductCardProps) {
   const [imageUrl, setImageUrl] = useState(FALLBACK_IMAGE);
 
+  const price = Number(product?.price ?? 0);
+  const originalPrice = Number(product?.originalPrice ?? 0);
+  const rating = Number(product?.rating ?? 0);
+  const soldCount = Number(product?.soldCount ?? 0);
+  const stock = Number(product?.stock ?? 0);
+
   useEffect(() => {
     let isMounted = true;
 
     const resolveImage = async () => {
-      const imageSource = product?.images?.[0] || FALLBACK_IMAGE;
+      const imageSource =
+        product?.imageUrl ||
+        product?.imageUrls?.[0] ||
+        product?.images?.[0] ||
+        FALLBACK_IMAGE;
       const resolved = await mediaService.getMediaUrl(imageSource, "sm");
 
       if (isMounted) {
@@ -33,18 +43,23 @@ export function ProductCard({ product, onToggleFavorite }: ProductCardProps) {
     return () => {
       isMounted = false;
     };
-  }, [product?.images]);
+  }, [product?.imageUrl, product?.imageUrls, product?.images]);
 
   if (!product) return null;
 
   const discountPercentage =
-    product.discount ||
-    (product.originalPrice
-      ? Math.round(
-          ((product.originalPrice - product.price) / product.originalPrice) *
-            100,
-        )
+    Number(product.discount ?? 0) ||
+    (originalPrice > 0
+      ? Math.round(((originalPrice - price) / originalPrice) * 100)
       : 0);
+
+  const displayPrice = Number.isFinite(price) ? price : 0;
+  const displayOriginalPrice = Number.isFinite(originalPrice)
+    ? originalPrice
+    : 0;
+  const displayRating = Number.isFinite(rating) ? rating : 0;
+  const displaySoldCount = Number.isFinite(soldCount) ? soldCount : 0;
+  const displayStock = Number.isFinite(stock) ? stock : 0;
 
   return (
     <Link
@@ -64,7 +79,7 @@ export function ProductCard({ product, onToggleFavorite }: ProductCardProps) {
           </Badge>
         )}
 
-        {product.stock === 0 && (
+        {displayStock === 0 && (
           <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
             <span className="text-white font-medium">Hết hàng</span>
           </div>
@@ -92,19 +107,19 @@ export function ProductCard({ product, onToggleFavorite }: ProductCardProps) {
         <div className="flex items-center gap-1 text-sm">
           <div className="flex items-center gap-1 text-warning">
             <Star className="h-3.5 w-3.5 fill-current" />
-            <span className="font-medium">{product.rating}</span>
+            <span className="font-medium">{displayRating}</span>
           </div>
           <span className="text-neutral-400">|</span>
-          <span className="text-neutral-600">Đã bán {product.soldCount}</span>
+          <span className="text-neutral-600">Đã bán {displaySoldCount}</span>
         </div>
 
         <div className="flex items-center gap-2">
           <span className="text-xl font-semibold text-primary">
-            {product.price.toLocaleString("vi-VN")}₫
+            {displayPrice.toLocaleString("vi-VN")}₫
           </span>
-          {product.originalPrice && product.originalPrice > product.price && (
+          {displayOriginalPrice > displayPrice && (
             <span className="text-sm text-neutral-400 line-through">
-              {product.originalPrice.toLocaleString("vi-VN")}₫
+              {displayOriginalPrice.toLocaleString("vi-VN")}₫
             </span>
           )}
         </div>

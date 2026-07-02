@@ -100,8 +100,8 @@ export function ProfilePage() {
     };
   }, [isAuthenticated, user?.id]);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     setShowLogoutDialog(false);
     window.location.href = "/";
   };

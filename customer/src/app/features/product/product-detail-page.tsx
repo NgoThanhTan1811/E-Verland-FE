@@ -36,6 +36,10 @@ export function ProductDetailPage() {
   const [isFavorite, setIsFavorite] = useState(false);
   const [addingToCart, setAddingToCart] = useState(false);
   const [resolvedImages, setResolvedImages] = useState<string[]>([]);
+  const [skuLabelMap, setSkuLabelMap] = useState<Record<string, string>>({});
+
+  const getSkuLabel = (sku: SkuResponse, index: number) =>
+    sku.skuCode?.trim() || sku.skuValue?.trim() || `Phân loại ${index + 1}`;
 
   useEffect(() => {
     if (!id) return;
@@ -70,13 +74,19 @@ export function ProductDetailPage() {
     let isMounted = true;
 
     const resolveImages = async () => {
-      if (!product?.images?.length) {
+      const imageSources = [
+        product?.imageUrl,
+        ...(product?.imageUrls || []),
+        ...(product?.images || []),
+      ].filter((value): value is string => Boolean(value));
+
+      if (!imageSources.length) {
         if (isMounted) setResolvedImages([]);
         return;
       }
 
       const urls = await Promise.all(
-        product.images.map((image, index) =>
+        imageSources.map((image, index) =>
           mediaService.getMediaUrl(image, index === 0 ? "lg" : "sm"),
         ),
       );
@@ -89,10 +99,23 @@ export function ProductDetailPage() {
 
     resolveImages();
 
+    if (product?.skus?.length) {
+      const labels = product.skus.reduce<Record<string, string>>(
+        (acc, sku, index) => {
+          acc[sku.id] = getSkuLabel(sku, index);
+          return acc;
+        },
+        {},
+      );
+      setSkuLabelMap(labels);
+    } else {
+      setSkuLabelMap({});
+    }
+
     return () => {
       isMounted = false;
     };
-  }, [product?.images]);
+  }, [product?.imageUrl, product?.imageUrls, product?.images, product?.skus]);
 
   const handleAddToCart = async () => {
     if (!isAuthenticated || !user) {
@@ -108,13 +131,32 @@ export function ProductDetailPage() {
 
     setAddingToCart(true);
     try {
+      const existingCart = await cartService.getCart(user.id);
+      const matchedItem = (existingCart.items || []).find(
+        (item) =>
+          item.productId === product.id && item.skuId === selectedSku?.id,
+      );
+
+      if (matchedItem) {
+        await cartService.updateItem(
+          matchedItem.id,
+          matchedItem.quantity + quantity,
+        );
+        toast.success("Đã cập nhật số lượng trong giỏ hàng!");
+        return;
+      }
+
       await cartService.addItem(user.id, {
         productId: product.id,
         skuId: selectedSku?.id || "",
         quantity,
         productName: product.name,
-        productImage: resolvedImages[0] || product.images?.[0],
-        skuValue: selectedSku?.skuValue || "",
+        productImage:
+          resolvedImages[0] ||
+          product.imageUrl ||
+          product.imageUrls?.[0] ||
+          product.images?.[0],
+        skuValue: selectedSku?.skuCode || selectedSku?.skuValue || "",
       });
       toast.success("Đã thêm vào giỏ hàng!");
     } catch (error: unknown) {
@@ -176,13 +218,15 @@ export function ProductDetailPage() {
     );
   }
 
-  const currentPrice = selectedSku?.price ?? product.price;
+  const currentPrice = Number(selectedSku?.price ?? product.price ?? 0);
+  const displayCurrentPrice =
+    currentPrice > 0 ? currentPrice : Number(product.price || 0);
+  const originalPrice = Number(product.originalPrice ?? 0);
   const discountPercentage =
     product.discount ||
-    (product.originalPrice
+    (originalPrice
       ? Math.round(
-          ((product.originalPrice - product.price) / product.originalPrice) *
-            100,
+          ((originalPrice - displayCurrentPrice) / originalPrice) * 100,
         )
       : 0);
 
@@ -304,17 +348,16 @@ export function ProductDetailPage() {
             <div className="bg-accent p-4 rounded-lg mb-6">
               <div className="flex items-baseline gap-3 mb-2">
                 <span className="text-3xl font-bold text-primary">
-                  {currentPrice.toLocaleString("vi-VN")}₫
+                  {displayCurrentPrice.toLocaleString("vi-VN")}₫
                 </span>
-                {product.originalPrice &&
-                  product.originalPrice > product.price && (
-                    <>
-                      <span className="text-lg text-neutral-400 line-through">
-                        {product.originalPrice.toLocaleString("vi-VN")}₫
-                      </span>
-                      <Badge variant="error">-{discountPercentage}%</Badge>
-                    </>
-                  )}
+                {originalPrice > displayCurrentPrice && (
+                  <>
+                    <span className="text-lg text-neutral-400 line-through">
+                      {originalPrice.toLocaleString("vi-VN")}₫
+                    </span>
+                    <Badge variant="error">-{discountPercentage}%</Badge>
+                  </>
+                )}
               </div>
               {product.stock !== undefined &&
                 product.stock > 0 &&
@@ -332,10 +375,16 @@ export function ProductDetailPage() {
             {product.skus && product.skus.length > 0 && (
               <div className="mb-6">
                 <label className="block mb-3">
-                  Phân loại: {selectedSku?.skuValue || ""}
+                  Phân loại:{" "}
+                  {selectedSku
+                    ? skuLabelMap[selectedSku.id] ||
+                      selectedSku.skuCode ||
+                      selectedSku.skuValue ||
+                      ""
+                    : ""}
                 </label>
                 <div className="flex flex-wrap gap-2">
-                  {product.skus.map((sku) => (
+                  {product.skus.map((sku, index) => (
                     <button
                       key={sku.id}
                       onClick={() => setSelectedSku(sku)}
@@ -346,7 +395,10 @@ export function ProductDetailPage() {
                           : "border-border hover:border-primary"
                       } ${sku.stock === 0 ? "opacity-50 cursor-not-allowed line-through" : ""}`}
                     >
-                      {sku.skuValue}
+                      {skuLabelMap[sku.id] ||
+                        sku.skuCode ||
+                        sku.skuValue ||
+                        `Phân loại ${index + 1}`}
                     </button>
                   ))}
                 </div>

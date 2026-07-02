@@ -25,6 +25,9 @@ export function EditProfilePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingProfile, setIsLoadingProfile] = useState(true);
   const [avatarPreview, setAvatarPreview] = useState(DEFAULT_AVATAR_URL);
+  const [accountId, setAccountId] = useState("");
+  const [profileId, setProfileId] = useState("");
+  const [hasProfile, setHasProfile] = useState(false);
 
   const [formData, setFormData] = useState({
     firstName: "",
@@ -59,8 +62,14 @@ export function EditProfilePage() {
       try {
         const me = await accountService.me();
         const profile = me.profile || user.profile;
+        const nextAccountId = me.account.id || user.id || "";
+        const nextProfileId = me.profile?.id || user.profile?.id || "";
 
         if (!isMounted) return;
+
+        setAccountId(nextAccountId);
+        setProfileId(nextProfileId);
+        setHasProfile(!!nextProfileId);
 
         const resolvedAvatar = await mediaService.getMediaUrl(
           profile?.avatarUrl || "",
@@ -82,6 +91,9 @@ export function EditProfilePage() {
         if (!isMounted) return;
 
         const fallbackProfile = user.profile;
+        setAccountId(user.id || "");
+        setProfileId(fallbackProfile?.id || "");
+        setHasProfile(!!fallbackProfile?.id);
         const resolvedAvatar = await mediaService.getMediaUrl(
           fallbackProfile?.avatarUrl || "",
           "sm",
@@ -143,7 +155,7 @@ export function EditProfilePage() {
     try {
       if (!user) throw new Error("Không tìm thấy thông tin người dùng");
 
-      const updatedProfile = await profileService.updateProfile(user.id, {
+      const profilePayload = {
         firstName: formData.firstName,
         lastName: formData.lastName,
         phoneNumber: formData.phoneNumber,
@@ -151,10 +163,25 @@ export function EditProfilePage() {
         dateOfBirth: formData.dateOfBirth || undefined,
         bio: formData.bio || undefined,
         avatarUrl: formData.avatarUrl || undefined,
-      });
+      };
+
+      const updatedProfile =
+        hasProfile && profileId
+          ? await profileService.updateProfile(
+              accountId || user.id,
+              profilePayload,
+            )
+          : await profileService.createProfile(
+              accountId || user.id,
+              profilePayload,
+            );
+
+      setProfileId(updatedProfile.id);
+      setHasProfile(true);
 
       updateUser({
         ...user,
+        id: accountId || user.id,
         profile: {
           id: updatedProfile.id,
           firstName: updatedProfile.firstName,
@@ -167,7 +194,9 @@ export function EditProfilePage() {
         },
       });
 
-      toast.success("Cập nhật thông tin thành công");
+      toast.success(
+        hasProfile ? "Cập nhật thông tin thành công" : "Tạo hồ sơ thành công",
+      );
       navigate("/profile");
     } catch (error: unknown) {
       toast.error(
